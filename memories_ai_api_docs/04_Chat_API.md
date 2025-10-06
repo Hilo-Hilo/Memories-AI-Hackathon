@@ -161,9 +161,80 @@ By providing the `videoNos`, developers can ask the Memories.ai to analyze, summ
 
 **POST** `/serve/api/v1/chat_stream`
 
-    import requestsimport jsonheaders = {    "Authorization": "<API_KEY>",    "Content-Type": "application/json",    "Accept": "text/event-stream"}payload = {    "video_nos": ["<VIDEO_ID_1>", "<VIDEO_ID_2>"],  # List of video IDs to chat about    "prompt": "Summarize the emotional moments in these videos",  # User query    "session_id": "<SESSION_ID>",  # Chat session ID    "unique_id": "<UNIQUE_ID>",}response = requests.post(    "https://api.memories.ai/serve/api/v1/chat_stream",    headers=headers,    json=payload,    stream=True)if response.status_code != 200:    print(response.status_code)    print(response.text)else:    try:        for line in response.iter_lines(decode_unicode=True):            if line:                print(line)                if line.strip().lower() == \'data:"done"\':                    print("\n")                    break                if line.startswith("data:"):                    print(line.replace("data:", "").strip(), end="", flush=True)    except Exception as e:        print(str(e))
+**IMPORTANT RESPONSE FORMAT DIFFERENCE:**
+- `/chat` returns a **single JSON response** with all content at once
+- `/chat_stream` returns **Server-Sent Events (SSE)** for incremental streaming
 
-    import requestsimport jsonheaders = {    "Authorization": "<API_KEY>",    "Content-Type": "application/json",}payload = {    "video_nos": ["<VIDEO_ID_1>", "<VIDEO_ID_2>"],  # List of video IDs to chat about    "prompt": "Summarize the emotional moments in these videos",  # User query    "session_id": "<SESSION_ID>",  # Chat session ID    "unique_id": "<UNIQUE_ID>",}response = requests.post(    "https://api.memories.ai/serve/api/v1/chat",    headers=headers,    json=payload,    stream=False)if response.status_code != 200:    print(response.status_code)    print(response.text)else:    try:        for line in response.iter_lines(decode_unicode=True):            if line:                print(line)                if line.strip().lower() == \'data:"done"\':                    print("\n")                    break                if line.startswith("data:"):                    print(line.replace("data:", "").strip(), end="", flush=True)    except Exception as e:        print(str(e))
+## Non-Streaming Chat Example (`/chat`)
+
+    import requests
+    import json
+
+    headers = {
+        "Authorization": "<API_KEY>",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "video_nos": ["<VIDEO_ID_1>", "<VIDEO_ID_2>"],
+        "prompt": "Divide this video into chapters with timestamps and descriptions",
+        "session_id": "<SESSION_ID>",  # Optional
+        "unique_id": "<UNIQUE_ID>"
+    }
+
+    response = requests.post(
+        "https://api.memories.ai/serve/api/v1/chat",
+        headers=headers,
+        json=payload
+    )
+
+    if response.status_code == 200:
+        result = response.json()
+        print(f"Content: {result['data']['content']}")
+        print(f"Session ID: {result['data']['session_id']}")
+
+        # Access thinking process
+        if 'thinkings' in result['data']:
+            for thought in result['data']['thinkings']:
+                print(f"Thinking: {thought['title']}")
+    else:
+        print(response.text)
+
+## Streaming Chat Example (`/chat_stream`)
+
+    import requests
+    import json
+
+    headers = {
+        "Authorization": "<API_KEY>",
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream"
+    }
+
+    payload = {
+        "video_nos": ["<VIDEO_ID_1>", "<VIDEO_ID_2>"],
+        "prompt": "Summarize the emotional moments in these videos",
+        "session_id": "<SESSION_ID>",
+        "unique_id": "<UNIQUE_ID>"
+    }
+
+    response = requests.post(
+        "https://api.memories.ai/serve/api/v1/chat_stream",
+        headers=headers,
+        json=payload,
+        stream=True
+    )
+
+    if response.status_code == 200:
+        for line in response.iter_lines(decode_unicode=True):
+            if line:
+                if line.strip().lower() == 'data:"done"':
+                    print("\n")
+                    break
+                if line.startswith("data:"):
+                    print(line.replace("data:", "").strip(), end="", flush=True)
+    else:
+        print(response.text)
 
 ## Request Body[​]()
 
@@ -177,6 +248,42 @@ By providing the `videoNos`, developers can ask the Memories.ai to analyze, summ
 | prompt | body | string | Yes | natural language prompt |
 | session\_id | body | int | No | ID of the chat session |
 | unique\_id | body | string | No | `default` by default |
+
+## Response Format
+
+### Non-Streaming Response (`/chat`)
+
+The `/chat` endpoint returns a **single complete JSON object**:
+
+    {
+      "code": "0000",
+      "msg": "success",
+      "data": {
+        "role": "ASSISTANT",
+        "content": "Here are proposed chapters with timestamps...",
+        "thinkings": [
+          {
+            "title": "Based on selected videos, fetch detailed information",
+            "content": "The user is asking for..."
+          }
+        ],
+        "session_id": "630309515755999232"
+      },
+      "failed": false,
+      "success": true
+    }
+
+**Response Fields:**
+- `data.content`: The main response text with the answer
+- `data.thinkings`: Array of AI reasoning steps (optional)
+  - `title`: Summary of the thinking step
+  - `content`: Detailed reasoning
+- `data.session_id`: Session identifier for multi-turn conversations
+- `data.role`: Always "ASSISTANT"
+
+### Streaming Response (`/chat_stream`)
+
+The `/chat_stream` endpoint returns **Server-Sent Events (SSE)** with multiple message types:
 
 🧠 Thinking Message
 
