@@ -1,8 +1,8 @@
-# Product Requirements Document: ADHD Distraction Analysis Web App
+# Product Requirements Document: ADHD Distraction Analysis Desktop Application
 
 ## Document Information
 
-- **Product Name:** Focus Guardian - ADHD Distraction Analysis Web App
+- **Product Name:** Focus Guardian - ADHD Distraction Analysis Desktop Application
 - **Version:** 1.0 (Draft)
 - **Date:** October 5, 2025
 - **Author:** Product Management Team
@@ -23,7 +23,7 @@ People with ADHD often struggle to maintain focus, especially in unstructured or
 3\. **Goal Alignment:** Assist the user in staying on task by importing their goals/calendar and breaking down tasks into manageable steps with automated tracking.  
 4\. **Personalization:** Adapt to each user over time by storing **semantic and episodic memories** of their behavior (when they get distracted, emotional states, effective interventions) to provide personalized strategies.  
 5\. **Emotion-Aware Feedback:** Leverage emotion recognition (via Hume AI) to gauge user frustration, stress, or boredom, and adjust interventions accordingly (e.g. if the user appears frustrated, the app might suggest a short break or a calming technique).  
-6\. **Minimize Burden:** Ensure the solution is easy to set up (no complex configuration), runs in a web browser without significant impact on device battery or performance, and keeps all sensitive raw data local to alleviate privacy concerns.
+6\. **Minimize Burden:** Ensure the solution is easy to set up (no complex configuration), runs as a native desktop application without significant impact on device battery or performance, and keeps all sensitive raw data local to alleviate privacy concerns.
 
 **Success Metrics (KPIs):**  
 \- _Detection Accuracy:_ ≥90% of clear distraction events (e.g. user visibly looking away or leaving desk) are correctly identified, with minimal false alerts.  
@@ -80,7 +80,7 @@ To better understand the context of distractions and the user's state, the app s
 
 **Real-Time Adaptation:** Emotional context will also modulate the alerting mechanism. Instead of a one-size-fits-all nudge, the app tailors its tone: e.g., a gentle encouragement if the user looks frustrated ("I know this is tough, but you can do it!") versus a more upbeat refocus prompt if the user simply looks distracted but not upset ("Let's get back on track 👍"). This empathic approach aims to keep the user motivated rather than annoyed. The Hume integration provides the necessary data for this empathy: for instance, detecting **vocal tone** like sighing or muttering can indicate frustration or fatigue, which the app shouldn't ignore in its coaching style.
 
-**Performance Consideration:** Because sending continuous video to an API would be bandwidth-heavy, the app will **throttle and sample** the emotion analysis. For example, it might analyze a face snapshot once every 10 seconds or when a potential distraction event occurs. Hume AI's API supports real-time streaming as well, but for efficiency we may use the batch mode (sending a single frame or short audio clip for inference) to get periodic emotional readouts. All calls to Hume are done via the front-end using Hume's JavaScript/TypeScript SDK (which handles the API communication securely) or via our backend proxy to keep API keys hidden.
+**Performance Consideration:** Because sending continuous video to an API would be bandwidth-heavy, the app will **throttle and sample** the emotion analysis. For example, it might analyze a face snapshot once every 10 seconds or when a potential distraction event occurs. Hume AI's API supports real-time streaming as well, but for efficiency we may use the batch mode (sending a single frame or short audio clip for inference) to get periodic emotional readouts. All calls to Hume are done via the desktop application using Hume's Python SDK (which handles the API communication securely) with API keys stored encrypted in local configuration files.
 
 ### FR4. Semantic & Episodic Memory (Personalization via Memories AI)
 
@@ -112,7 +112,7 @@ The product is delivered as a **native desktop application** packaged with PyIns
 While not core to the MVP, the system may support additional integrations to enhance functionality:
 
 - **Calendar Integration:** (Optional) As described in FR2, connecting a calendar helps the app contextualize the user's focus sessions. In addition to import, if given write access, the app could automatically create calendar entries for focus sessions or distraction logs (e.g., log "Focus Session - 45 min" on the calendar for self-tracking). This integration should use standard APIs (Google Calendar API, Microsoft Graph for Outlook) and adhere to least privilege (only reading events and writing focus logs if user enables that feature). The PRD treats this as an enhancement: it's highly useful but the app should still function without it (user manually inputs their current goal).
-- **Email Integration:** (Optional) An idea is to integrate with email (e.g., Gmail or Outlook) to both manage distractions and gather context. For example, the app could detect when the user alt-tabs to check email during a focus session and count that as a distraction (this would require a browser extension or desktop app to monitor active window, which is out of scope for a pure web app - possibly an extension in future). On the other hand, email could be a source of tasks: the app might parse flagged emails or to-dos from email content to suggest tasks to focus on. Due to complexity, email integration is considered a future enhancement and would need careful privacy handling (accessing email content might be sensitive).
+- **Email Integration:** (Optional) An idea is to integrate with email (e.g., Gmail or Outlook) to both manage distractions and gather context. For example, the desktop app could detect when the user alt-tabs to check email during a focus session and count that as a distraction (using cross-platform window monitoring libraries like pygetwindow or platform-specific APIs). On the other hand, email could be a source of tasks: the app might parse flagged emails or to-dos from email content to suggest tasks to focus on. Due to complexity, email integration is considered a future enhancement and would need careful privacy handling (accessing email content might be sensitive).
 - **Other Productivity Tools:** (Future Consideration) Integration with project management tools (Trello, Asana, etc.) or note-taking apps could deepen the system's knowledge of what the user should be doing. These are beyond the current scope but can be kept in mind for extensibility. The architecture should allow adding new integrations without major overhaul (perhaps via plugin-like modules that feed the goal/task system).
 
 **Note:** Both calendar and email integrations require user authentication into third-party services and should use industry-standard OAuth flows. They are optional - the app's core loop (monitor distraction, alert user, log data) does not depend on them. If not connected, the user can manually specify their focus periods or rely on default work hour settings.
@@ -163,7 +163,7 @@ The backend component serves primarily as a secure data store and integration po
 - For email or other integrations, similarly, the backend can fetch or listen for data (though real-time email distraction detection would require continuous client monitoring as noted earlier, so likely only offline analysis like summarizing tasks from emails).
 - These integration modules ensure that third-party API calls and keys are secured on server side, and only necessary info is passed to the client.
 - **WebSockets (Notifications):** While the client is mostly pulling data or handling things itself, the backend could use WebSockets or Server-Sent Events to push certain updates. For example, if a user's friend or coach is viewing their session remotely (if we implement a co-watcher), the backend could relay events. Or if we schedule server-side analytics (like an AI periodically analyzing behavior and generating a suggestion), it could push a notification to the client ("New insight available!"). This is not mandatory for MVP but we design the system to allow real-time server->client messages if needed.
-- **Scalability:** Since most compute is client-side, the backend load is relatively modest (mostly handling data storage and some processing of stored data). This makes it easy to scale: we can host on a cloud function or small server for the hackathon MVP. If user base grows, we scale the database and perhaps add caching for analytics results. The architecture inherently offloads heavy computation to the edge (browser), aligning with modern edge computing practices (perform ML at the data source to reduce cloud burden[\[6\]](https://www.researchgate.net/figure/Edge-AI-Vs-Cloud-AI-Architecture_fig1_383420800#:~:text=low%20latency%20and%20low%20energy,)). This also improves scalability because adding users doesn't linearly increase server CPU costs, mainly storage and some periodic jobs.
+- **Scalability:** Since most compute is client-side (on the user's desktop), the backend load is relatively modest (mostly handling data storage and some processing of stored data). This makes it easy to scale: we can host on a cloud function or small server for the hackathon MVP. If user base grows, we scale the database and perhaps add caching for analytics results. The architecture inherently offloads heavy computation to the edge (user's device), aligning with modern edge computing practices (perform ML at the data source to reduce cloud burden[\[6\]](https://www.researchgate.net/figure/Edge-AI-Vs-Cloud-AI-Architecture_fig1_383420800#:~:text=low%20latency%20and%20low%20energy,)). This also improves scalability because adding users doesn't linearly increase server CPU costs, mainly storage and some periodic jobs.
 
 ### Tech Stack Considerations
 
@@ -231,38 +231,38 @@ Insert the following into your PRD. Do not rewrite prior sections; splice these 
 
 ## Runtime Topology
 
-- **Realtime (Edge, in-browser only):**
-  - Inputs: webcam frames; optional screen frames (via getDisplayMedia).
-  - Ops: image-only inference for posture, activity, and screen-content classification. No LLM/VLM calls. No cloud I/O.
-  - Outputs: timestamped event stream (focus/distract, posture state, active app class), in-memory + IndexedDB ring buffer; optional low-freq thumbnails for local audit only.
-- **Post-Processing (End-of-session, cloud):**
-  - Inputs: two MP4s saved locally-cam.mp4 (user) and screen.mp4 (display)-default 480p, configurable bitrate.
-  - Upload targets: **Memories.ai** (primary) + **Hume AI** (expression timeline).
+- **Realtime (On-Device, Local Processing):**
+  - Inputs: webcam frames via OpenCV; optional screen frames via mss library.
+  - Ops: image-only inference for posture, activity, and screen-content classification using MediaPipe and local ML models. No LLM/VLM calls. No cloud I/O during realtime processing.
+  - Outputs: timestamped event stream (focus/distract, posture state, active app class) stored in SQLite database; optional low-freq thumbnails for local audit only.
+- **Post-Processing (End-of-session, optional cloud features):**
+  - Inputs: two MP4s saved locally—cam.mp4 (user) and screen.mp4 (display)—default 480p, configurable bitrate.
+  - Upload targets (optional): **Memories.ai** (primary) + **Hume AI** (expression timeline).
   - Ops: Memories Chat API runs LLM/VLM over the two videos to extract structured session summaries; Hume produces expression tracks.
-  - Outputs: normalized JSON report (schema below) persisted in backend DB; links to Memories objects; expression timeline merged.
+  - Outputs: normalized JSON report (session_report.json) persisted in local SQLite database and optionally synced to cloud; links to Memories objects; expression timeline merged.
 
 ## Data Flow Summary
 
-- **Session start:** user grants camera; optional screen share; choose quality profile.
-- **Realtime loop:** CV-only metrics at 1-5 Hz; UI nudges; ring buffer retention; zero network.
-- **Session end:** stop capture; finalize two MP4s; upload; trigger post-processing jobs; generate report; sync to dashboard.
+- **Session start:** user grants camera permissions via system dialogs; optional screen capture; choose quality profile.
+- **Realtime loop:** CV-only metrics at 1-5 Hz processed in background threads; desktop UI notifications/nudges; SQLite storage; zero network activity.
+- **Session end:** stop capture; finalize two MP4s locally; optionally upload if cloud features enabled; trigger post-processing jobs; generate session_report.json; display in desktop dashboard.
 
 # 2) Realtime module (new subsection under "Functional Requirements")
 
-## FR1a. Realtime CV Pipeline (Edge)
+## FR1a. Realtime CV Pipeline (On-Device)
 
 - **Frame cadence:** 1-5 Hz webcam; 0.2-1 Hz screen snapshot; both downscaled to target (default 480p, min 256p).
 - **Posture:** MediaPipe BlazeFace/FaceMesh + head-pose; optional BlazePose upper-body. States: {neutral, slouch, head-down, head-away, out-of-frame, micro-sleep}.
 - **Activity:** heuristics on motion vectors + face/eye features; classify {focused, reading, typing-like, phone-likely, talking, absent}.
-- **Screen content (image classification, not OCR):** window archetypes via lightweight CNN (e.g., ONNX Runtime Web): {IDE/docs/terminal/slides/video/short-video/social/feed/chat/games/unknown}.
+- **Screen content (image classification, not OCR):** window archetypes via lightweight CNN (using ONNX Runtime Python or TensorFlow Lite): {IDE/docs/terminal/slides/video/short-video/social/feed/chat/games/unknown}.
 - **Fusion:** hysteresis state machine with debounce (≥5 s) to reduce false positives; emits focus_event and distract_event with reason codes.
-- **Edge budgets:** CPU avg <30%; memory <300 MB; auto-throttle frame rate on perf drop.
+- **Device budgets:** CPU avg <30%; memory <300 MB; auto-throttle frame rate on perf drop.
 
 ## FR1b. Realtime Storage & Privacy
 
 - No raw frames leave device.
 - Ring buffer: last N thumbnails (default N=0; off by default).
-- IndexedDB: transient event stream; auto-purge after upload.
+- SQLite: transient event stream stored locally; auto-purge after successful cloud sync.
 - Controls: Pause, Sensitivity slider, Screen-capture toggle.
 
 # 3) Post-processing pipeline (new subsection under "Functional Requirements")
@@ -318,7 +318,7 @@ Insert the following into your PRD. Do not rewrite prior sections; splice these 
 
 }
 
-# 4) UX changes (append to "Minimal Setup & Web-Based UX")
+# 4) UX changes (append to "Minimal Setup & Desktop Application UX")
 
 - **Quality presets:** Low (256p/10fps/200 kbps), Standard (480p/15fps/500 kbps), High (720p/15fps/1000 kbps).
 - **Screen capture scope:** full screen or single window; default: single window.
@@ -327,13 +327,13 @@ Insert the following into your PRD. Do not rewrite prior sections; splice these 
 
 # 5) Tech stack deltas (append to "Tech Stack Considerations")
 
-- **Recording:** MediaRecorder for MP4/H.264; mux webcam and display into separate streams; fallback WebM/VP9 in Safari → transcode client-side via FFmpeg.wasm if needed (batch, post-session).
-- **Realtime CV:** MediaPipe FaceMesh/BlazePose via TF.js or ONNX Runtime Web; head-pose (PnP on landmarks) via OpenCV.js; small CNN for screen archetypes (~3-5M params, int8).
+- **Recording:** OpenCV VideoWriter or ffmpeg-python for MP4/H.264 encoding; separate video streams for webcam and screen; native H.264 codec support across all platforms.
+- **Realtime CV:** MediaPipe FaceMesh/BlazePose via Python bindings; head-pose (PnP on landmarks) via OpenCV (cv2); small CNN for screen archetypes (~3-5M params, int8) using ONNX Runtime Python or TensorFlow Lite.
 - **Post-proc calls:**
-  - **Memories.ai:** Upload two assets; invoke Chat API with schema prompt; poll job; fetch JSON.
-  - **Hume:** Video expression endpoint; poll; fetch 1 Hz tracks.
-- **Backend:** thin Node/Express proxy for API keys + webhook receivers; Postgres for session_report storage; signed URLs to artifacts; no raw media retention after confirm.
-- **Workers:** Web Workers for realtime CV; background fetch() with keepalive for uploads.
+  - **Memories.ai:** Upload two assets via requests library; invoke Chat API with schema prompt; poll job status; fetch JSON response.
+  - **Hume:** Video expression endpoint via Hume Python SDK; poll job status; fetch 1 Hz emotion tracks.
+- **Backend (Optional):** FastAPI server for API keys proxy + webhook receivers; PostgreSQL for session_report cloud storage; signed URLs to artifacts; no raw media retention after confirmation.
+- **Threading:** Python threading module for concurrent operations (video analysis, audio monitoring, screen capture, API calls); multiprocessing for CPU-intensive tasks if needed.
 
 # 6) Privacy, retention, and bandwidth (new subsection under "Non-Functional Requirements")
 
@@ -385,23 +385,23 @@ Insert the following into your PRD. Do not rewrite prior sections; splice these 
 
 **Realtime**
 
-User -> WebApp: Start session
+User -> DesktopApp: Start session
 
-WebApp -> Camera/Screen: getUserMedia/getDisplayMedia
+DesktopApp -> Camera/Screen: OpenCV VideoCapture / mss screen capture
 
-WebApp (Worker): CV loop (posture/activity/screen-class) @ 1-5 Hz
+DesktopApp (Background Thread): CV loop (posture/activity/screen-class) @ 1-5 Hz
 
-Worker -> UI: events (focus/distract) with reasons
+Background Thread -> UI Thread: events (focus/distract) with reasons via Queue
 
-UI -> User: nudges (debounced)
+UI Thread -> User: desktop notifications/nudges (debounced)
 
 **Post-processing**
 
-User -> WebApp: End session
+User -> DesktopApp: End session
 
-WebApp: finalize cam.mp4 + screen.mp4
+DesktopApp: finalize cam.mp4 + screen.mp4 locally
 
-WebApp -> Backend: upload(cam, screen)
+DesktopApp -> Backend (Optional): upload(cam, screen) via requests
 
 Backend -> Memories.ai: store assets
 
@@ -409,18 +409,18 @@ Backend -> Hume: submit cam.mp4 for expressions
 
 Backend: poll jobs, merge outputs -> session_report.json
 
-Backend -> WebApp: report ready
+Backend -> DesktopApp: report ready (stored in local SQLite)
 
 # 11) Risks deltas (append to "Risks & Open Issues")
 
-- **Recording compatibility:** MP4/H.264 availability varies by browser; include WebM fallback + optional client-side transcode.
+- **Recording compatibility:** MP4/H.264 codec support via OpenCV and ffmpeg-python; fallback to platform-specific codecs if needed.
 - **Upload size/time:** long sessions produce large files; enforce caps, chunked uploads, resumable transport; expose ETA.
 - **Memories/Hume quotas:** enforce sampling and profile presets; backoff on 429; queue jobs.
 - **LLM hallucination in post-proc:** constrain with strict schema; add validation; surface "confidence" per field.
 
 # 12) README/demo checklist (for "Completeness & Reliability")
 
-- One-command setup (pnpm + env template).
+- One-command setup (pip/uv install + .env template).
 - Demo script: 10-min session; end; show report.
 - Evals notebook: latency, CPU, F1, ablations.
 - Privacy doc: data paths, toggles, retention table.
