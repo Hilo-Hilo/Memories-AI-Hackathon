@@ -4,9 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Memories AI Hackathon project that integrates with the Memories.ai API - a next-generation video understanding platform leveraging LLMs and multimodal processing to enable human-like comprehension of videos.
+**Focus Guardian** - A PyInstaller-packaged desktop application for ADHD distraction analysis and focus assistance. This Memories AI Hackathon project combines:
+
+- **Real-time distraction detection** using MediaPipe and OpenCV for webcam-based face/eye tracking
+- **Emotion analysis** via Hume AI Expression API (optional, cloud-based)
+- **Long-term pattern tracking** via Memories.ai API (optional, cloud-based)
+- **Local-first architecture** with SQLite storage - all core functionality works offline
+- **Session recording** with post-processing analysis (webcam + screen capture to MP4)
+
+The app runs as a native desktop application on macOS, Windows, and Linux, packaged with PyInstaller for easy distribution.
 
 ## API Information
+
+### Memories.ai API
 
 **Base URL**: `https://api.memories.ai/v1.2`
 
@@ -16,6 +26,16 @@ Authorization: Bearer YOUR_API_KEY
 ```
 
 API key is stored in `.env` as `MEM_AI_API_KEY`. Create your key at https://memories.ai/docs/Create%20your%20key/
+
+### Hume AI API
+
+**Base URL**: `https://api.hume.ai/v0`
+
+**Authentication**: API key in `X-Hume-Api-Key` header or use Hume Python SDK
+
+API key is stored in `.env` as `HUME_API_KEY`. Create your key at https://platform.hume.ai/
+
+**Expression Measurement**: Analyzes facial expressions and vocal tone to detect emotions (frustration, boredom, focus, stress)
 
 ## Core Architecture Concepts
 
@@ -124,15 +144,96 @@ New users receive 100 free credits. Pricing is pay-as-you-go per 1,000 minutes, 
 - 08_Code_Examples.md - Implementation samples
 - 09_Pricing_and_Rate_Limits.md - Pricing details
 
+## Desktop Application Architecture
+
+**Tech Stack**:
+- **GUI**: CustomTkinter or PyQt6 for modern, cross-platform UI
+- **CV/ML**: MediaPipe (face/pose tracking), OpenCV (video capture/processing)
+- **Audio**: sounddevice or pyaudio with NumPy/SciPy for FFT analysis
+- **Screen Capture**: mss library for cross-platform screen recording
+- **Recording**: OpenCV VideoWriter or ffmpeg-python for MP4 encoding
+- **Storage**: SQLite for local data (sessions, events, KPIs, recommendations)
+- **Threading**: Python threading/multiprocessing for concurrent operations
+- **Packaging**: PyInstaller with platform-specific installers (DMG/MSI/AppImage)
+
+**Core Modules**:
+- `distraction_detector.py` - MediaPipe-based gaze/posture detection
+- `session_manager.py` - Orchestrates recording and analysis
+- `screen_recorder.py` - Screen capture functionality
+- `audio_monitor.py` - Audio analysis and speech detection
+- `report_generator.py` - Generate session_report.json
+- `api_integrations.py` - Hume AI and Memories.ai API wrappers
+- `desktop_app.py` - Main GUI application entry point
+
+**Database Schema** (SQLite):
+- `focus_sessions` - Session metadata (start/end time, duration, task)
+- `segments` - Time segments (focus/break/distraction intervals)
+- `distraction_events` - Individual distraction occurrences with type/duration
+- `expressions` - Emotion analysis results (if Hume AI enabled)
+- `recommendations` - Generated suggestions for improvement
+- `session_recordings` - File paths to MP4 recordings
+
+**Session Report Format** (session_report.json):
+```json
+{
+  "session_id": "uuid",
+  "meta": {"started_at": "iso", "ended_at": "iso", "profile": "Low|Std|High"},
+  "segments": [
+    {
+      "t0": "s", "t1": "s", "label": "Focus|Break|Distraction",
+      "task_hypothesis": "string",
+      "apps": [{"class": "IDE|Browser|Video|Social", "share": 0.0}],
+      "distractions": [{"t0": "s", "t1": "s", "type": "LookAway|Phone", "evidence": "string"}],
+      "posture": {"mode": "Neutral|Slouch|HeadAway", "pct": 0.0},
+      "expressions": {"frustration_mean": 0.0, "valence_mean": 0.0}
+    }
+  ],
+  "kpis": {
+    "focus_ratio": 0.0, "avg_focus_bout_min": 0.0, "num_alerts": 0,
+    "top_triggers": ["Video", "Phone"], "peak_distraction_hour": "15:00-16:00"
+  },
+  "recommendations": [{"type": "BreakSchedule|AppBlock", "msg": "string"}]
+}
+```
+
 ## Development Guidelines
 
-**Python Dependencies**: Use `requests` library for HTTP calls
+**Python Dependencies**:
+- Use `requests` library for API calls
+- Use Hume Python SDK for emotion analysis
+- All dependencies managed via `pyproject.toml`
+
+**API Integration**:
+- **Memories.ai**: Upload session MP4s via `/serve/api/v1/upload`, query via Chat API for structured analysis
+- **Hume AI**: Send video frames or audio samples to Expression API, parse emotion features
+- Both APIs are **optional features** - app must work completely offline
 
 **Error Handling**:
-- Check video status before search/chat (must be "PARSE")
+- Check video status before Memories.ai search/chat (must be "PARSE")
 - Handle 429 rate limit errors with backoff
 - Use callbacks for async workflows
+- Gracefully degrade if APIs unavailable (queue uploads, continue local operation)
 
-**Streaming Responses**: Set `Accept: text/event-stream` header, iterate lines, stop when receiving "done" or "[DONE]"
+**Threading Best Practices**:
+- UI thread must remain responsive - never block on I/O or computation
+- Use separate threads for: video analysis, audio monitoring, screen capture, API calls
+- Use thread-safe queues for inter-thread communication
+- Properly cleanup threads on session end
 
-**Testing**: Use tools like Beeceptor for callback URL testing during development
+**Privacy & Security**:
+- No raw video/audio sent to cloud unless user explicitly enables upload
+- Store API keys encrypted in local config
+- All session recordings stored locally in user's app data directory
+- Clear user consent required before any cloud upload
+
+**Testing**:
+- Test distraction detection with various lighting conditions and head positions
+- Verify memory usage doesn't grow during long sessions (8+ hours)
+- Test offline functionality - all core features should work without internet
+- Use tools like Beeceptor for callback URL testing during development
+
+**PyInstaller Packaging**:
+- Bundle all MediaPipe model files as data files
+- Include hidden imports for all CV/ML dependencies
+- Test executable on clean system without Python installed
+- Code sign for macOS (notarization) and Windows (Authenticode)
