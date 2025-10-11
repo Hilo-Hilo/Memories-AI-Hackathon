@@ -1,14 +1,23 @@
 [project]
-name = "memories-ai-hackathon"
+name = "focus-guardian"
 version = "0.1.0"
-description = "Memories AI Hackathon project with video understanding and emotion detection"
+description = "Focus Guardian - ADHD distraction analysis desktop application with snapshot-based cloud vision AI"
 requires-python = ">=3.10"
 dependencies = [
+    # Core Application
+    "openai>=1.0.0",
     "opencv-python>=4.8.0",
+    "ffmpeg-python>=0.2.0",
+    "mss>=9.0.0",
+    "customtkinter>=5.2.0",
+    "pillow>=10.0.0",
+    "numpy>=1.24.0",
+    # Optional Cloud Services
     "hume>=0.5.0",
     "requests>=2.31.0",
+    # Data & Storage
     "python-dotenv>=1.0.0",
-    "numpy>=1.24.0",
+    "cryptography>=41.0.0",
 ]
 
 [project.optional-dependencies]
@@ -16,6 +25,7 @@ dev = [
     "pytest>=7.4.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+    "pyinstaller>=6.0.0",
 ]
 
 [build-system]
