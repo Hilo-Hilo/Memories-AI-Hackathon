@@ -3,34 +3,34 @@
 ## Document Information
 
 - **Product Name:** Focus Guardian - ADHD Distraction Analysis Desktop Application
-- **Version:** 1.0 (Draft)
+- **Version:** 1.2 (Draft)
 - **Date:** October 5, 2025
-- **Author:** Product Management Team
+- **Author:** Hanson Wen
 
 ## Executive Summary
 
-Focus Guardian is a **desktop application** designed to help individuals with ADHD monitor and reduce distraction episodes in real time. Using a device's camera and microphone, the app detects when a user loses focus or becomes distracted and provides gentle interventions to refocus attention. The system integrates advanced AI services-Hume AI for emotion recognition and Memories AI for long-term behavioral pattern tracking-to personalize feedback and track progress over time. All core processing runs **locally on the user's computer** to ensure minimal setup and protect user privacy, with only high-level analysis results (not raw video/audio) sent to the cloud for storage and pattern analysis. Optional integrations with calendar and email can enrich the app's understanding of the user's schedule and tasks, enabling proactive focus assistance. The ultimate goal is to create an **autonomous digital "coach"** that not only detects distractions but also helps users self-correct and build better focus habits, all through a minimally intrusive, battery-efficient **native desktop application** packaged with PyInstaller for easy distribution.
+Focus Guardian is a **desktop application** designed to help individuals with ADHD monitor and reduce distraction episodes in real time. Using a device's camera, the app detects when a user loses focus or becomes distracted and provides gentle interventions to refocus attention. The system uses periodic snapshot analysis via OpenAI Vision API to detect distraction patterns, with full video recordings stored locally. Snapshot images (webcam and screen) are sent to OpenAI for classification during sessions. Post-session, users can optionally upload recordings to Hume AI for emotion analysis or Memories.ai for pattern analysis to personalize feedback and track progress over time. Optional integrations with calendar and email can enrich the app's understanding of the user's schedule and tasks, enabling proactive focus assistance. The ultimate goal is to create an **autonomous digital "coach"** that not only detects distractions but also helps users self-correct and build better focus habits, all through a minimally intrusive, battery-efficient **native desktop application** packaged with PyInstaller for easy distribution.
 
 ## Problem Statement
 
-People with ADHD often struggle to maintain focus, especially in unstructured or remote work environments. Moments of distraction-whether daydreaming, fidgeting, or getting pulled into unrelated activities-can significantly reduce productivity and increase frustration. Traditional solutions like site blockers or timers address external distractions but **do not actively monitor the person's attention state**. There is a need for a personalized tool that can **recognize distraction as it happens** through behavioral cues (e.g. gaze aversion, facial expressions, ambient audio) and gently guide the user back on track. Moreover, ADHD individuals benefit from external structure and feedback; however, constant human coaching is impractical. An automated, intelligent assistant that understands the user's goals and patterns could fill this gap. The solution must be privacy-conscious (many users are uncomfortable recording sensitive video/audio to the cloud) and easy to use (minimal setup, simple installation), running as a **native desktop application** on laptops and desktop computers people already use daily.
+People with ADHD often struggle to maintain focus, especially in unstructured or remote work environments. Moments of distraction-whether daydreaming, fidgeting, or getting pulled into unrelated activities-can significantly reduce productivity and increase frustration. Traditional solutions like site blockers or timers address external distractions but **do not actively monitor the person's attention state**. There is a need for a personalized tool that can **recognize distraction as it happens** through behavioral cues (e.g. gaze aversion, screen content patterns) and gently guide the user back on track. Moreover, ADHD individuals benefit from external structure and feedback; however, constant human coaching is impractical. An automated, intelligent assistant that understands the user's goals and patterns could fill this gap. The solution must be privacy-conscious (many users are uncomfortable recording sensitive video/audio to the cloud) and easy to use (minimal setup, simple installation), running as a **native desktop application** on laptops and desktop computers people already use daily.
 
 ## Objectives & Success Metrics
 
-**Primary Objectives:**  
-1\. **Real-Time Distraction Detection:** Accurately detect episodes of inattention or distraction via webcam video and microphone audio, with low latency.  
+**Primary Objectives:**
+1\. **Pattern-Based Distraction Detection:** Accurately detect episodes of inattention or distraction via webcam video and screen content analysis, with 2-3 minute latency for high-accuracy pattern recognition.  
 2\. **Timely Intervention:** Prompt the user with a subtle alert or cue when a distraction is detected, enabling them to self-correct quickly.  
 3\. **Goal Alignment:** Assist the user in staying on task by importing their goals/calendar and breaking down tasks into manageable steps with automated tracking.  
 4\. **Personalization:** Adapt to each user over time by storing **semantic and episodic memories** of their behavior (when they get distracted, emotional states, effective interventions) to provide personalized strategies.  
 5\. **Emotion-Aware Feedback:** Leverage emotion recognition (via Hume AI) to gauge user frustration, stress, or boredom, and adjust interventions accordingly (e.g. if the user appears frustrated, the app might suggest a short break or a calming technique).  
 6\. **Minimize Burden:** Ensure the solution is easy to set up (no complex configuration), runs as a native desktop application without significant impact on device battery or performance, and keeps all sensitive raw data local to alleviate privacy concerns.
 
-**Success Metrics (KPIs):**  
-\- _Detection Accuracy:_ ≥90% of clear distraction events (e.g. user visibly looking away or leaving desk) are correctly identified, with minimal false alerts.  
-\- _User Focus Improvement:_ 25% reduction in average daily "off-task" time after 1 month of use (measured by length of detected distraction episodes).  
-\- _User Engagement:_ At least 70% of users continue using the app daily after 4 weeks, indicating sustained value.  
-\- _Personalization Efficacy:_ >80% of users report that the feedback/interventions feel "helpful and tailored" in post-use surveys.  
-\- _Performance:_ The app maintains real-time analysis (video processed at ~15+ FPS) on a typical laptop without exceeding 30% CPU usage on average, and with negligible impact on battery life (target <5% per hour).
+**Success Metrics (KPIs):**
+\- _Detection Accuracy:_ ≥90% of clear distraction events (e.g. user visibly looking away or leaving desk) are correctly identified, with minimal false alerts.
+\- _User Focus Improvement:_ 25% reduction in average daily "off-task" time after 1 month of use (measured by length of detected distraction episodes).
+\- _User Engagement:_ At least 70% of users continue using the app daily after 4 weeks, indicating sustained value.
+\- _Personalization Efficacy:_ >80% of users report that the feedback/interventions feel "helpful and tailored" in post-use surveys.
+\- _Performance:_ The app maintains snapshot analysis (60-second intervals with 2-3 minute pattern detection) on a typical laptop without exceeding 30% CPU usage on average, and with negligible impact on battery life (target <5% per hour).
 
 ## User Personas
 
@@ -44,20 +44,23 @@ People with ADHD often struggle to maintain focus, especially in unstructured or
 - **Goal/Task Management:** _As a user, I want to import my tasks or calendar events into the app so it knows what I intend to work on and can remind me of my goal if I get distracted._
 - **Personalized Guidance:** _As a user, I want the app to learn my patterns (e.g. I often get distracted in mid-afternoon) and suggest proactive strategies (like scheduling a break or using the Focus mode at those times)._
 - **Emotion-Sensitive Response:** _As a user, if I become frustrated or anxious, I want the app to recognize that and respond supportively (for example, not just telling me "get back to work" if I appear very upset, but perhaps suggesting a brief relaxation exercise)._
-- **Privacy Assurance:** _As a user, I want to be confident that my video and audio data are not being recorded or sent to someone's server without my consent, so I feel safe using the app continuously._
+- **Privacy Transparency:** _As a user, I want clear information about what data is sent to cloud services (periodic snapshots to OpenAI) and what stays on my device (full video recordings), so I can make informed decisions about using the app._
 
 ## Functional Requirements
 
-### FR1. Distraction Detection (Video & Audio)
+### FR1. Distraction Detection (Snapshot-Based Vision Analysis)
 
-The system shall **detect distraction episodes in real time** using the user's webcam video and microphone input. Key behaviors to detect include:
+The system shall **detect distraction patterns** using periodic snapshots from the user's webcam and screen. The detection approach uses K=3 hysteresis (analyzing 3 consecutive snapshots spanning 2 minutes) to ensure high accuracy and avoid false alarms from brief glances. Key behaviors to detect include:
 
-- **Visual Inattention:** If the user's gaze or head turns away from the screen for a sustained period (e.g. >5 seconds) or if they appear to be "staring into space" (face oriented but eyes unfocused), the app flags a loss of focus. This can be achieved via facial landmark and head pose tracking. For example, using on-device computer vision, the app monitors if the user's eyes deviate from the screen or if the head is down (possible phone use) or turned away. Techniques like MediaPipe face mesh or similar can track eye gaze and blink rate.
-- **Physical Distractors:** Detect if the user leaves their workspace (e.g., no face detected in frame) or engages in unrelated activities. If the webcam sees the user fidgeting excessively (frequent large movements, e.g., rocking in chair) or interacting with objects not related to work (identified by repetitive motions), it may indicate distraction. Prior research shows sensors/cameras can catch cues such as _fidgeting with the chair, moving away from the work area, or playing with objects on the desk as signs of losing focus_[_\[1\]_](https://link.springer.com/article/10.1007/s44230-025-00099-1#:~:text=system%20utilized%20sensors%20strategically%20placed,or%20losing%20focus%20by%20daydreaming). Our app will use similar cues via the webcam feed (and possibly laptop accelerometer if available, for movement).
-- **Auditory Distractors:** Using the microphone, the system listens for significant background audio that might distract the user. Examples: sudden loud noises (a TV or music turning on), side conversations, or the user starting to talk to someone else. Basic audio classification can differentiate speech vs. silence vs. music. The app shall detect if the user themselves starts vocalizing unrelated content (e.g., talking on a phone or singing), which could indicate they are off-task. (No speech-to-text transcription is stored locally beyond immediate analysis; the content isn't as important as the fact the user is conversing or not in quiet focus.)
-- **Drowsiness/Fatigue:** If video analysis shows signs of drowsiness (e.g. frequent eye closing or yawning), the app flags this since fatigue can lead to distraction or loss of focus. For instance, slow blink rates or nodding off posture can be recognized. This overlaps with distraction detection as an early warning (user is no longer effectively focusing if falling asleep).
+- **Visual Inattention:** If the user's gaze or head turns away from the screen across multiple snapshots (sustained pattern over 2-3 minutes), the app flags a loss of focus. OpenAI Vision API analyzes webcam snapshots to detect: head orientation changes (>45° away from screen), eyes off-screen, or "absent" states where no face is visible.
+- **Physical Absence:** Detect if the user leaves their workspace consistently across snapshots (e.g., no face detected in multiple consecutive frames spanning 2 minutes).
+- **Phone Usage:** Identify when a user is holding or looking at a phone/mobile device in the webcam frame, confirmed across multiple snapshots.
+- **Screen Content Distractors:** Analyze screen snapshots to detect distracting content: video streaming, social media feeds, gaming, or chat applications. The system differentiates between focus activities (code editors, documentation, terminals) and distraction activities (social feeds, videos, games).
+- **Drowsiness/Fatigue:** If video analysis shows signs of drowsiness (e.g. eyes closed, drowsy expression) across multiple snapshots, the app flags this since fatigue leads to distraction. This serves as an early warning that the user is no longer effectively focusing.
 
-When a distraction is detected, the app must timestamp the event and classify it (e.g., "looked away from screen for 10 seconds" or "left desk" or "phone conversation detected"). **No raw video or audio is recorded to disk;** analysis is on-the-fly using streaming data in memory. The detection module will run continuously but efficiently (using lightweight models, throttling frame rate if needed to save battery).
+**Detection Latency:** The hysteresis approach (K=3 snapshots with 60-second intervals) means confirmed distraction alerts appear 2-3 minutes after distraction begins. This is a deliberate design choice to eliminate false positives - brief glances or momentary distractions don't trigger alerts, only sustained pattern changes.
+
+When a distraction pattern is detected, the app timestamps the event and classifies it with specific labels (e.g., "HeadAway", "SocialFeed", "VideoOnScreen"). **Snapshot images are uploaded to OpenAI Vision API for analysis; full video recordings stay local** unless the user enables optional post-session cloud processing.
 
 **Alert Mechanism:** Upon detecting a likely distraction that lasts more than a brief threshold (configurable, e.g. >5-10 seconds to avoid false alarms), the app provides feedback. This could be a gentle audio chime or a desktop notification saying "Refocus on task X". The alert should be configurable (some users may prefer a subtle visual nudge vs. a sound). The app should also allow a short grace period; for example, if the user quickly regains focus, an alert might be skipped to avoid annoyance. Additionally, if the user explicitly _pauses_ the monitoring (say they intentionally take a break), alerts are suppressed.
 
@@ -70,17 +73,23 @@ The system shall incorporate features of an **intelligent productivity assistant
 - **Agentic Self-Correction:** The assistant should exhibit _agentic behavior_ in helping the user stay on course. This means beyond just alerting, it can take initiative to adjust the plan. For instance, if repeated distractions are detected on a particular task, the system might ask: "Is this task too difficult or causing stress? Should we break it down or schedule a short break?" If a user runs over the allocated time for a task (from calendar or user input), the system might automatically reorganize the schedule (with user permission), pushing meetings or sending a notification that the current task needs more time. This essentially makes the app a smart coach that not only tracks tasks but can suggest corrections: **auto-rescheduling, reminders to return to task after break, or recommending focus techniques** (like the Pomodoro technique if the user is consistently distracted after ~20 minutes).
 - **Progress Tracking:** The app will automatically log time spent on each task vs. distracted, giving the user a real-time view of progress. For example, "Writing Report - focused 40 min, distracted 5 min" might be displayed. If integrated with a task manager, the app can mark tasks complete or update progress status once finished (with user confirmation). The user can also manually correct or annotate sessions (e.g., "I was interrupted by a phone call here"). This data feeds into the personal Memory (FR4).
 
-### FR3. Emotion Recognition (Hume AI Integration)
+### FR3. Post-Session Emotion Intelligence (Hume AI Integration)
 
-To better understand the context of distractions and the user's state, the app shall integrate **emotion analysis** on the fly. This feature uses **Hume AI's Expression APIs** to interpret facial expressions and vocal tone for emotional cues. Hume AI's models can measure "hundreds of dimensions of human expression" across face and voice[\[3\]](https://dev.hume.ai/intro#:~:text=Hume%E2%80%99s%20state,in%20audio%2C%20video%2C%20and%20images), meaning the app can detect nuanced emotional states like frustration, confusion, boredom, or engagement level.
+To better understand emotional patterns that drive distraction, the app offers **optional post-session emotion analysis**. After a focus session ends, the recorded webcam video can be uploaded to **Hume AI's Expression API** for detailed emotion timeline analysis. Hume AI's models measure "hundreds of dimensions of human expression" across facial expressions[\[3\]](https://dev.hume.ai/intro#:~:text=Hume%E2%80%99s%20state,in%20audio%2C%20video%2C%20and%20images), detecting nuanced emotional states like frustration, confusion, boredom, and engagement level.
 
-**Functionality:**  
-\- The app will periodically send snapshots of the video (e.g., an image frame every few seconds when the user is active) or short audio snippets to the Hume AI cloud API for analysis. This is done via secure API calls and only when the user has consented (during setup, the user is informed and can toggle emotion sensing on/off). If privacy settings disallow cloud, this feature can be disabled or possibly use a local emotion model (with lower accuracy).  
-\- The emotion analysis results (e.g., "high frustration", "bored", "focused", "happy") are used to augment distraction data. For example, if a distraction is detected and the emotion analysis shows rising frustration right before it, the system infers the user might be struggling with the task. It could then recommend a strategy (like "Seems you are getting frustrated; maybe take a 5-minute break or switch to a simpler task and come back later"). If it detects boredom (low engagement expression) leading to distraction, it might suggest making the task more engaging or changing approach.
+**Functionality:**
+\- **Post-Session Upload:** After a session ends, the user can choose to upload the webcam recording (cam.mp4) to Hume AI for emotion analysis. This is entirely optional and requires explicit user consent each time.
+\- **Emotion Timeline Generation:** Hume AI processes the video and returns a 1Hz emotion timeline showing how emotions like frustration, boredom, stress, and concentration fluctuated throughout the session.
+\- **Correlation Analysis:** The system correlates emotion spikes with distraction events. For example: "Your frustration increased 5 minutes before each distraction event" or "Boredom levels peaked during documentation tasks".
+\- **Actionable Insights:** The final session report includes emotion-aware recommendations like: "Frustration often precedes distraction for you. Try scheduling 2-minute breaks when you feel frustrated" or "Boredom detected during repetitive tasks - consider using the Pomodoro technique for these".
 
-**Real-Time Adaptation:** Emotional context will also modulate the alerting mechanism. Instead of a one-size-fits-all nudge, the app tailors its tone: e.g., a gentle encouragement if the user looks frustrated ("I know this is tough, but you can do it!") versus a more upbeat refocus prompt if the user simply looks distracted but not upset ("Let's get back on track 👍"). This empathic approach aims to keep the user motivated rather than annoyed. The Hume integration provides the necessary data for this empathy: for instance, detecting **vocal tone** like sighing or muttering can indicate frustration or fatigue, which the app shouldn't ignore in its coaching style.
+**Privacy and Control:**
+\- Users maintain full control - they can review each session and decide whether to upload for emotion analysis
+\- Video is only sent to Hume if explicitly approved
+\- Raw emotion data is stored securely and only the user can access it
+\- Users can delete any uploaded emotion analysis data at any time
 
-**Performance Consideration:** Because sending continuous video to an API would be bandwidth-heavy, the app will **throttle and sample** the emotion analysis. For example, it might analyze a face snapshot once every 10 seconds or when a potential distraction event occurs. Hume AI's API supports real-time streaming as well, but for efficiency we may use the batch mode (sending a single frame or short audio clip for inference) to get periodic emotional readouts. All calls to Hume are done via the desktop application using Hume's Python SDK (which handles the API communication securely) with API keys stored encrypted in local configuration files.
+**Performance Consideration:** Since emotion analysis happens post-session, there's no real-time bandwidth consumption or latency impact during focus sessions. The Hume AI processing typically completes within 5-10 minutes after upload, generating comprehensive insights without interrupting the user's workflow. All calls to Hume use the desktop application with Hume's Python SDK and API keys stored encrypted in local configuration files.
 
 ### FR4. Semantic & Episodic Memory (Personalization via Memories AI)
 
@@ -97,7 +106,7 @@ All personal data in this memory is stored securely (likely under the user's acc
 
 The product is delivered as a **native desktop application** packaged with PyInstaller - meaning the user can download and install it like any standard application, with **no special hardware or complicated configuration**. Key requirements for the UX and setup include:
 
-- **Onboarding:** The first time user experience will guide the user through granting permissions (camera and microphone access). It will clearly explain why these are needed (e.g., "We use your camera to detect when you get distracted, but **no video is ever sent to the cloud** without your consent"). The onboarding also asks if the user wants to connect their calendar or task manager (optional, can be skipped). If they choose to, a secure OAuth flow to Google, Microsoft, etc., is provided. Similarly, they can opt in/out of emotion analysis (explaining that involves sending data to Hume AI cloud). The goal is to make initial setup doable in minutes. Default settings will work out-of-the-box (e.g., some default alert settings and working hours), which the user can later customize. On macOS, the app will request necessary permissions through system dialogs.
+- **Onboarding:** The first time user experience will guide the user through granting camera access permissions. It will clearly explain how the system works: "We capture periodic snapshots (every 60 seconds) from your camera and screen to detect distraction patterns. **Snapshot images are sent to OpenAI Vision API for analysis**. Full video recordings stay on your device unless you choose to upload them for optional post-session emotion analysis." The onboarding also asks if the user wants to connect their calendar or task manager (optional, can be skipped). If they choose to, a secure OAuth flow to Google, Microsoft, etc., is provided. The goal is to make initial setup doable in minutes. Default settings will work out-of-the-box (e.g., some default alert settings and working hours), which the user can later customize. On macOS, the app will request necessary permissions through system dialogs.
 - **UI Design:** The interface will be clean and minimal to avoid being a distraction itself. Likely there will be a **dashboard screen** that shows: current focus session or task, a timer or progress indicator, and maybe an icon indicating monitoring is ON. There may be a small status like "🔵 Focus mode active" or "🟡 Break (monitoring paused)". When an alert triggers, it might display as a system notification or small overlay window rather than a jarring popup. The color scheme and visuals should be calming (avoiding bright reds or alarming designs, as the aim is supportive). Battery and CPU efficiency considerations mean using native UI frameworks (CustomTkinter, PyQt, or Tkinter) with minimal animations and efficient rendering.
 - **Cross-Platform Support:** The desktop application will support macOS, Windows, and Linux through PyInstaller packaging. The primary use case is desktop/laptop computers where users typically do their focus work. Each platform will have a native installer (DMG for macOS, MSI/EXE for Windows, AppImage/DEB for Linux). Platform-specific features (like system tray integration or native notifications) will be implemented using conditional imports and platform detection.
 - **Battery/CPU Optimizations:** The app will implement numerous optimizations to remain lightweight:
@@ -105,7 +114,7 @@ The product is delivered as a **native desktop application** packaged with PyIns
 - Adaptive frame rate processing: if the app detects high CPU or battery drain, it can reduce how often it samples video frames (e.g., processing 1 frame per second when idle, ramping up to 5 fps during active focus sessions). Many distraction cues don't require 30fps full motion analysis - a lower frequency can suffice to catch most issues, thereby saving power.
 - Use of Threading: all heavy computations (video frame analysis, emotion API calls) will run in background threads using Python's threading or multiprocessing modules, so the UI thread remains free and the application stays responsive.
 - Graceful degradation: On older devices that cannot handle local video analysis well, the app could detect this and offer an alternative (such as more reliance on cloud analysis, if the user permits, or limiting features like turning off emotion analysis).
-- **Security & Privacy UX:** Clearly communicate privacy features in the UI. For example, have an indicator when video is being analyzed (like a small camera icon that the user can click to see "Video is being processed locally. No footage is stored."). Also allow users to easily pause or stop monitoring at any time (maybe a big "Pause" button), giving them control. This transparency will build trust, which is crucial for an app that has access to camera/mic continuously.
+- **Security & Privacy UX:** Clearly communicate privacy features in the UI. For example, have an indicator showing when snapshots are being captured and uploaded (like a small camera icon that the user can click to see "Snapshot captured and sent to OpenAI Vision API for analysis. Full video recording stored locally."). Also allow users to easily pause or stop monitoring at any time (maybe a big "Pause" button), giving them control. This transparency will build trust, which is crucial for an app that has camera access.
 
 ### FR6. Optional Integrations (Calendar, Email, etc.)
 
@@ -119,103 +128,219 @@ While not core to the MVP, the system may support additional integrations to enh
 
 ## Non-Functional Requirements (NFRs)
 
-- **NFR1: Privacy & Data Security:** The system shall ensure that **no raw video or audio data is transmitted or stored outside the user's local device** (unless explicitly enabled by the user for features like Hume emotion analysis). All cloud-stored data will be limited to processed results and metadata. Data in transit to cloud (e.g., emotion analysis calls, result uploads) must be encrypted (HTTPS). In storage (databases), user data must be encrypted at rest. The user will have unique access to their data (protected by account login). We will comply with relevant privacy laws (e.g., GDPR) giving users rights to their data (export, deletion).
-- **NFR2: Performance:** The distraction detection should run in real-time with minimal lag. The UI feedback loop (from distraction event to user alert) should occur within 1-2 seconds at most. The app should be optimized to use <500MB RAM and keep CPU usage low (target <30% on a typical 4-core CPU during active analysis). It should not noticeably slow down other applications. To maintain system health, if the app detects it is using too many resources (via performance APIs), it may auto-throttle or warn the user.
+- **NFR1: Privacy & Data Security:** The system transmits **periodic snapshot images** (webcam and screen) to OpenAI Vision API for analysis during focus sessions. Full video recordings remain on the local device unless explicitly uploaded by the user for optional post-session emotion analysis (Hume AI) or pattern analysis (Memories.ai). All cloud-stored data will be limited to processed results, snapshot images, and metadata. Data in transit to cloud (e.g., snapshot uploads, emotion analysis calls) must be encrypted (HTTPS). In storage (databases), user data must be encrypted at rest. The user will have unique access to their data (protected by account login). We will comply with relevant privacy laws (e.g., GDPR) giving users rights to their data (export, deletion).
+- **NFR2: Performance:** The distraction detection uses pattern-confirmed analysis with 2-3 minute latency (K=3 snapshots spanning 60+ seconds). This deliberate design choice eliminates false positives from brief glances. Individual snapshot processing should complete within 5 seconds (p95 latency for OpenAI Vision API call + analysis). The app should be optimized to use <500MB RAM and keep CPU usage low (target <30% on a typical 4-core CPU during active analysis). It should not noticeably slow down other applications. To maintain system health, if the app detects it is using too many resources (via performance APIs), it may auto-throttle or warn the user.
 - **NFR3: Battery Efficiency:** Especially for laptop users on battery, the app should be thrifty. Utilizing device resources like GPU for video processing can be more power-efficient than pegging CPU. OpenCV and MediaPipe can leverage GPU acceleration when available. The app shall avoid continuous high-resolution processing; for example, analyzing a downsampled video stream (e.g., 320x240 px frames) is often sufficient for face detection and significantly reduces CPU load. If available, the app can make use of any OS-level optimizations or platform-specific ML accelerators (like CoreML on macOS, DirectML on Windows). The aim is that running the app for an hour uses only a small percentage of battery - achieving this will likely require tuning and possibly dynamic adjustment of processing intensity.
 - **NFR4: Compatibility:** The desktop app must be compatible with modern operating systems (macOS 10.14+, Windows 10+, Ubuntu 20.04+). It should degrade gracefully if certain features aren't available. For instance, if GPU acceleration isn't available, the app might use CPU-only processing (with a possible hit to performance, but still functional). The app will detect platform capabilities at startup and adjust processing accordingly.
-- **NFR5: Reliability:** The system should handle long-running sessions (e.g., 8+ hours of monitoring) without memory leaks or crashes. It should also be resilient to internet connectivity issues: since most core features run locally, the app can function offline or with intermittent connectivity, simply queuing any cloud uploads until the connection restores. The user interface should clearly show if cloud features (like fetching personalization data or syncing with calendar) are temporarily unavailable due to offline status, but local monitoring continues unaffected.
-- **NFR6: Security:** Follow best practices for desktop application security. All libraries used for the app should be well-audited to prevent vulnerabilities, especially since we are dealing with camera/mic. Store sensitive data (API keys, session recordings) using encrypted storage. The backend APIs will authenticate requests (the user will likely log in to the app, possibly using OAuth or our own account system, to tie their data to them). The system must also ensure that no one else can access the user's data - e.g., memory data is scoped per user account with proper auth checks. The PyInstaller bundle will be code-signed on macOS and Windows to ensure authenticity.
+- **NFR5: Reliability:** The system should handle long-running sessions (e.g., 8+ hours of monitoring) without memory leaks or crashes. **Internet connectivity is required during focus sessions** for OpenAI Vision API snapshot analysis. The system should be resilient to brief connectivity issues: if the connection drops temporarily (<5 minutes), snapshots are queued locally and uploaded when connectivity restores. If connectivity is lost for extended periods (>5 minutes), the session should pause automatically and notify the user. The user interface should clearly show connectivity status and queue depth. Optional cloud features (Hume emotion analysis, Memories.ai uploads, calendar sync) can be deferred until connectivity is available.
+- **NFR6: Security:** Follow best practices for desktop application security. All libraries used for the app should be well-audited to prevent vulnerabilities, especially since we are dealing with camera access. Store sensitive data (API keys, session recordings) using encrypted storage. The backend APIs will authenticate requests (the user will likely log in to the app, possibly using OAuth or our own account system, to tie their data to them). The system must also ensure that no one else can access the user's data - e.g., memory data is scoped per user account with proper auth checks. The PyInstaller bundle will be code-signed on macOS and Windows to ensure authenticity.
 - **NFR7: Usability:** The app's interventions must be supportive, not punitive or overly distracting themselves. We will follow UX guidelines for assistive tech - for example, allow the user to adjust alert frequency or turn off certain types of nudges. The user retains ultimate control (they can snooze the assistant if needed). The interface will be simple to navigate, with clear terminology (avoid technical jargon in user-facing text). We will gather some user feedback in testing to ensure the prompts and summaries are actually helpful and not guilt-inducing.
 - **NFR8: Extensibility:** The architecture should allow adding new detection methods or integrations. For example, if later we want to incorporate keystroke or mouse activity as additional signals of distraction, the system's modular design should accommodate plugging in another module (using libraries like pynput for cross-platform input monitoring). Similarly, if alternative emotion recognition or memory services are to be supported, it should be relatively easy to swap those in (abstract the API calls behind interfaces).
+- **NFR9: Cost Transparency:** The system uses cloud AI services with associated costs that users should understand upfront. The application will provide cost estimates before starting sessions and track actual spending throughout use.
+
+### Cost Model
+
+The system uses three main cloud services, each with distinct cost structures:
+
+**OpenAI Vision API (Required During Sessions):**
+- Cost per snapshot: ~$0.01 (using "low" detail mode)
+- Snapshots per session: (duration_minutes × 60 / interval_seconds) × 2 (cam + screen)
+- Standard 2-hour session (60s intervals): 120 snapshots × 2 × $0.01 = $2.40
+
+**Hume AI Expression Analysis (Optional Post-Session):**
+- Cost: ~$0.50 per 2-hour video analysis
+- User chooses whether to upload after each session
+- Estimated monthly (20 sessions with emotion analysis): $10
+
+**Memories.ai Video Analysis (Optional Post-Session):**
+- Cost: ~$1.00 per 2-hour session (video upload + VLM analysis)
+- User chooses whether to upload after each session
+- Estimated monthly (20 sessions with full analysis): $20
+
+**Quality Profile Cost Trade-offs:**
+
+| Profile | Interval | Snapshots/2hr | Cost/2hr | Accuracy | Use Case |
+|---------|----------|---------------|----------|----------|----------|
+| High Frequency | 30s | 240 | $4.80 | Highest | Critical focus sessions |
+| Standard | 60s | 120 | $2.40 | Balanced | Daily work sessions |
+| Economy | 90s | 80 | $1.60 | Good | Long sessions, budget-conscious |
+
+**Monthly Cost Estimates (20 work sessions @ 2hr each):**
+- Minimum (Standard quality, no optional features): $48/month
+- Typical (Standard quality + occasional emotion analysis): $58/month
+- Maximum (High frequency + all features): $144/month
+
+**Cost Control Features:**
+- Adjustable snapshot frequency (30s - 120s)
+- Session-based estimates before starting
+- Real-time cost tracking in UI
+- Monthly spending reports
+- Optional cost caps with auto-pause
+
+## Detection Label Taxonomy
+
+To ensure consistency across all system components, this section defines the canonical set of detection labels used throughout the application. All documentation, code, and API integrations reference these exact labels.
+
+### Webcam Labels (Camera Snapshot Analysis)
+
+| Label | Description | Confidence Threshold | Category |
+|-------|-------------|---------------------|----------|
+| `HeadAway` | Head turned >45° from screen | 0.7 | Distraction |
+| `EyesOffScreen` | Gaze not directed at screen | 0.7 | Distraction |
+| `Absent` | No person visible in frame | 0.8 | Absence |
+| `MicroSleep` | Eyes closed, drowsy appearance | 0.7 | Distraction |
+| `PhoneLikely` | Phone visible in hand or being viewed | 0.75 | Distraction |
+| `Focused` | Engaged posture, eyes on screen | 0.6 | Focus |
+
+### Screen Labels (Screen Content Analysis)
+
+| Label | Description | Confidence Threshold | Category |
+|-------|-------------|---------------------|----------|
+| `VideoOnScreen` | Video player or streaming content (YouTube, Netflix, etc.) | 0.7 | Distraction |
+| `SocialFeed` | Social media feed scrolling (Twitter, Instagram, Facebook, LinkedIn, TikTok) | 0.75 | Distraction |
+| `Code` | Code editor or IDE (VS Code, PyCharm, Sublime, JetBrains, Vim) | 0.7 | Focus |
+| `Docs` | Documentation, technical reading, wikis, API docs | 0.65 | Focus |
+| `Email` | Email client (Gmail, Outlook, Apple Mail) | 0.6 | Borderline* |
+| `VideoCall` | Video conferencing UI (Zoom, Meet, Teams, FaceTime) | 0.7 | Borderline* |
+| `Reading` | Long-form reading (ebooks, PDFs, news articles, NOT code docs) | 0.65 | Focus |
+| `Slides` | Presentation software (PowerPoint, Google Slides, Keynote) | 0.7 | Focus |
+| `Terminal` | Command line terminal or shell | 0.75 | Focus |
+| `ChatWindow` | Chat/messaging applications (Slack, Discord, WhatsApp, iMessage) | 0.7 | Distraction |
+| `Games` | Gaming applications or entertainment software | 0.8 | Distraction |
+| `MultipleMonitors` | Multiple windows visible, context switching | 0.6 | Borderline* |
+| `Unknown` | Cannot determine content type | 0.5 | Neutral |
+
+**Note on Borderline Categories:**
+- `Email`: Context-dependent - inbox processing = focus, frequent checking = distraction
+- `VideoCall`: Work meeting = focus, social call = distraction (requires additional context)
+- `MultipleMonitors`: Single focus window = acceptable, rapid switching = distraction
+
+### Label Hierarchy and Precedence
+
+When multiple labels are detected in a single snapshot:
+
+1. **Camera labels take precedence for attention state:**
+   - If `Absent` or `MicroSleep` detected → ABSENT state (highest priority)
+   - If `HeadAway`, `EyesOffScreen`, or `PhoneLikely` detected → DISTRACTED state
+   - If `Focused` detected → proceed to screen analysis
+
+2. **Screen labels provide distraction type specificity:**
+   - Combined with camera distraction → specific distraction type (e.g., "HeadAway + VideoOnScreen" → "Distracted watching video")
+   - Standalone screen distraction → lower confidence distraction
+   - Focus labels + focused camera → FOCUSED state
+
+3. **Confidence aggregation:**
+   - Multiple distraction labels increase overall distraction confidence
+   - Conflicting labels (e.g., "Focused" + "VideoOnScreen") → use hysteresis voting across K=3 snapshots
+
+### Usage Throughout System
+
+- **OpenAI Vision API prompts:** Use these exact label names in classification prompts
+- **Database schema:** Store as enum types matching these labels
+- **State machine:** Reference these labels for transition logic
+- **UI display:** Show user-friendly versions (e.g., "Head turned away" for `HeadAway`)
+- **Reports:** Use these labels for distraction type classification
+- **Analytics:** Aggregate statistics by these label categories
 
 ## Technical Architecture
 
-_System architecture diagram illustrating key components and data flows._ The desktop application handles real-time video/audio capture and on-device analysis, only sending minimal results to the cloud. The optional cloud backend stores AI analysis results and patterns (Memories AI), and integrates optional services like calendar or email. External APIs (Hume AI) are used for specialized analysis (emotion), with privacy safeguards in place. All core functionality works completely offline with local SQLite storage.
+The system uses a **snapshot-based cloud vision API approach** with local video recording. The architecture prioritizes pattern-confirmed accuracy over instantaneous detection, using K=3 hysteresis voting to eliminate false positives. **Session Report Schema:** v1.3 (includes vision_votes and snapshot_refs fields for post-session analysis reconciliation).
 
-### Desktop Application (Local)
+### Runtime Topology
 
-The desktop application is the centerpiece, running all real-time processes locally on the user's computer:
+**Realtime (On-Device + Network Active):**
+- Session start immediately initiates two continuous recordings: cam.mp4 (webcam) and screen.mp4 (screen), running end-to-end for the entire session
+- Snapshot scheduler captures still images at developer-configurable cadence (default: every 60s) from both sources:
+  - cam_snapshot_YYYYmmdd_HHMMSS.jpg
+  - screen_snapshot_YYYYmmdd_HHMMSS.jpg
+- Each snapshot uploads in realtime to OpenAI Vision API for image-only inference (no audio). Results are cached locally and used for live nudges
+- Network activity is continuous per snapshot cadence
+- All media and inferences are written to per-session folders
 
-- **Video/Audio Capture Module:** Utilizes OpenCV (cv2.VideoCapture) to access webcam streams and libraries like sounddevice or pyaudio for microphone input. Video frames are fed into the processing pipeline as NumPy arrays for analysis. Audio is primarily monitored for amplitude and classification (not full transcript); audio processing libraries can extract frequency data or detect speech segments. We will not continuously record or send this raw media during realtime analysis, it's processed on-the-fly in memory. For post-session analysis, recordings are saved locally as MP4 files.
-- **Distraction Analysis Module:** This contains the core algorithms running in background threads. Sub-components include:
-- _Face & Eye Tracker:_ Uses MediaPipe FaceMesh (Python) to track the user's face orientation and eye gaze. The pre-trained model provides 3D face landmarks from which we compute metrics like "looking off-screen angle" or eye openness (for drowsiness). This runs every X milliseconds on the video frames in a dedicated thread.
-- _Pose/Posture Detector:_ Optionally uses MediaPipe's BlazePose model for upper-body posture tracking (e.g., to detect if user slumped or left the chair frame). This is an enhancement feature for ergonomic posture feedback, though our main focus is attention - posture is secondary.
-- _Audio Monitor:_ Listens to the mic input using sounddevice or pyaudio with NumPy/SciPy for FFT analysis to detect speech vs silence or sudden noise. We might integrate a simple machine learning model for classifying audio segments if needed, or simply use heuristics (e.g., volume spikes, presence of non-silent periods when the user is supposed to be quietly working).
+**Post-Processing (End of Session, Cloud Jobs):**
+- Inputs: cam.mp4, screen.mp4, and all snapshots
+- Upload targets: Hume AI (video expression tracks over cam.mp4) and Memories.ai (session assets for segmentation/LLM+VLM analysis)
+- Outputs: merged session_report.json persisted in SQLite and optionally synced
 
-This module in real-time decides if a "distraction event" is happening. It likely runs a small state machine or buffer (to avoid reacting to split-second changes). For example: if gaze is off-screen continuously for >5 seconds, trigger event; if user leaves frame for >10 seconds, trigger event, etc.
+### Local Folder Layout (Per Session)
 
-- **Emotion Analysis Integration:** If enabled, the application will interface with Hume AI. API calls are made directly from the desktop app using the Hume Python SDK or requests library. When we want an emotion reading, the app will capture a still image (or short audio clip) and send it via an HTTPS request to Hume's Expression API endpoint. The response (an emotion feature vector or labeled emotions) is parsed and fed into the personalization logic and possibly immediate feedback logic. API keys are stored securely in the local configuration file with encryption. _(These calls are infrequent and only initiated based on need.)_
-- **User Interface & Control:** The application uses a Python GUI framework (CustomTkinter, PyQt, or Tkinter) to render the dashboard, status, and handle user interactions (like pausing monitoring, acknowledging alerts, viewing reports). The UI communicates with the background analysis via threading events and queues. For example, the analysis thread might post messages like {event: "distracted", type:"look-away", timestamp: ...} to a queue which the UI thread receives to display a notification. Conversely, if the user clicks "dismiss alert" or "pause", the UI signals the analysis thread to halt or adjust thresholds. The UI also handles login and integration authorizations (OAuth flows via system browser).
-- **Local Data Storage:** All data is stored locally using SQLite for structured data (sessions, events, KPIs) and the filesystem for recordings (MP4 files). The database schema matches the session_report.json structure with tables for segments, distractions, expressions, and recommendations. Settings and user preferences are stored in JSON configuration files. Session recordings are organized in timestamped directories. All data remains on-device unless the user explicitly enables cloud sync features.
-- **Screen Capture Module:** For comprehensive distraction analysis, the app can optionally capture screen content using libraries like mss (for screenshots) or python-mss for efficient screen recording. This allows detection of which applications the user is using (browser, IDE, video player) and whether they've switched to distracting content. Screen capture runs in a separate thread and can be toggled on/off by the user.
-- **Recording Module:** For post-session analysis, the app can record both webcam and screen to local MP4 files using OpenCV's VideoWriter or ffmpeg-python. Recordings include configurable quality presets (Low/Standard/High) to balance file size and detail. After a session ends, these recordings can optionally be uploaded to Memories.ai or Hume for detailed cloud-based analysis.
+```
+sessions/<session_id>/
+  cam.mp4
+  screen.mp4
+  snapshots/
+    cam_*.jpg
+    screen_*.jpg
+  vision/
+    cam_*.json
+    screen_*.json
+  logs/
+    runtime.log
+    uploads.log
+```
 
-### Cloud Backend
+### Snapshot-Based Detection Pipeline
 
-The backend component serves primarily as a secure data store and integration point, **not for real-time processing**. Its responsibilities:
+**Sources:** Webcam frames, screen frames. Audio is disabled.
 
-- **REST/GraphQL API:** The backend exposes endpoints for the client to: authenticate the user, fetch or update user profile/settings, and upload analysis results (distraction events, session summaries). For instance, when the client has a distraction event ready to log, it calls POST /api/events with the JSON payload (timestamp, type, duration, emotion summary, etc.). Similarly, there might be an endpoint GET /api/dashboard for the client to retrieve aggregated stats or weekly reports. These APIs require the user's auth token and all communication is over HTTPS.
-- **Authentication & User Management:** Users will likely create an account (or log in via Google/OAuth). The backend manages these accounts and links them to stored data. Authentication tokens (JWT or session cookies) are issued to the client. We'll enforce auth on data endpoints so one user cannot access another's data.
-- **Database:** A scalable cloud database stores the **analysis results and patterns**. This can be a relational DB or a combination of a time-series DB and a vector store. For structured events (timestamp, type, etc.), a relational or time-series database is appropriate. For more complex semantic data (perhaps embeddings of context or patterns for personalization), we might use a vector database. Given the likely scale (each user might generate a few dozen events a day), the data volume is not huge; even a SQLite or lightweight DB per user could suffice initially, but we'll opt for a multi-tenant DB for simplicity. The **Memories AI** integration might mean we use their platform as the database: e.g., calling a Memories.ai API to store each event. They tout a "multimodal data lake with a single semantic layer"[\[5\]](https://memories.ai/solution#:~:text=It%20can%20detect%20unusual%20behavior%2C,layer%20makes%20all%20video) which could offer built-in analysis capabilities (like querying for similar past events or detecting unusual patterns[\[4\]](https://memories.ai/solution#:~:text=solution%20,layer%20makes%20all%20video)). If that service is used, our backend would act as a bridge to it. Alternatively, we implement our own analytics. This decision can be made based on the hackathon context and available resources.
-- **Analytics & Pattern Analysis:** Either via the Memories AI platform or our own batch jobs, the backend will analyze accumulated data to extract patterns. This could run periodically (e.g., a daily cron job that crunches the latest data and updates a user's profile with new insights). Example: calculating the user's average focus duration, identifying peak distraction times, or training a simple model to predict when a user is likely to get distracted next. These results are then available to send to the client (e.g., in the weekly report or live adaptation). If using Memories.ai, some of this may be offloaded to their API which might provide analytics out of the box (their marketing implies capabilities like detecting unusual behavior or summarizing video content, which might extend to summarizing our event streams).
-- **Integration Services:** The backend also handles any heavy lifting for optional integrations:
-- For calendar sync, if the user grants permission, the backend could fetch upcoming events and send them to the client or directly incorporate them into the schedule logic. (This avoids putting sensitive API keys or secrets in the client. The client would just request "import calendar" and the backend, having stored refresh tokens from OAuth, fetches events from Google Calendar API and returns them.)
-- For email or other integrations, similarly, the backend can fetch or listen for data (though real-time email distraction detection would require continuous client monitoring as noted earlier, so likely only offline analysis like summarizing tasks from emails).
-- These integration modules ensure that third-party API calls and keys are secured on server side, and only necessary info is passed to the client.
-- **WebSockets (Notifications):** While the client is mostly pulling data or handling things itself, the backend could use WebSockets or Server-Sent Events to push certain updates. For example, if a user's friend or coach is viewing their session remotely (if we implement a co-watcher), the backend could relay events. Or if we schedule server-side analytics (like an AI periodically analyzing behavior and generating a suggestion), it could push a notification to the client ("New insight available!"). This is not mandatory for MVP but we design the system to allow real-time server->client messages if needed.
-- **Scalability:** Since most compute is client-side (on the user's desktop), the backend load is relatively modest (mostly handling data storage and some processing of stored data). This makes it easy to scale: we can host on a cloud function or small server for the hackathon MVP. If user base grows, we scale the database and perhaps add caching for analytics results. The architecture inherently offloads heavy computation to the edge (user's device), aligning with modern edge computing practices (perform ML at the data source to reduce cloud burden[\[6\]](https://www.researchgate.net/figure/Edge-AI-Vs-Cloud-AI-Architecture_fig1_383420800#:~:text=low%20latency%20and%20low%20energy,)). This also improves scalability because adding users doesn't linearly increase server CPU costs, mainly storage and some periodic jobs.
+**Continuous Recording:** MP4/H.264 for cam and screen from t0→t1 without gaps.
 
-### Tech Stack Considerations
+**Snapshot Cadence:** Developer-tunable SNAPSHOT_INTERVAL_SEC (default 60; min 10). Implementation uses wall-clock scheduler independent of frame rate.
 
-To fulfill the above, we propose the following technologies, chosen for **minimal complexity** and desktop-focused efficiency:
+**Inference:** Each snapshot → OpenAI Vision API → JSON result saved to vision/ and inserted into SQLite.
 
-- **Desktop Application:**
-- **GUI Framework:** _CustomTkinter_ or _PyQt6_ for building the modern UI. CustomTkinter provides a clean, modern look with dark mode support and is simpler than PyQt. PyQt6 offers more advanced features and native platform integration. Both support cross-platform deployment. For rapid prototyping, CustomTkinter is preferred; for production-grade polish, PyQt6.
-- **Media/ML Libraries:** Use _MediaPipe_ (Python) for face/pose tracking - highly optimized C++ implementations with Python bindings. _OpenCV_ (cv2) for video capture and general image processing. These libraries provide near-native performance and are battle-tested for real-time CV applications.
-- **Audio Processing:** _sounddevice_ or _pyaudio_ for microphone capture, _NumPy/SciPy_ for FFT analysis and audio feature extraction. These provide efficient audio stream handling with minimal overhead.
-- **Threading:** Python's _threading_ module for concurrent operations (UI thread, video analysis thread, audio monitoring thread, recording thread). For CPU-intensive tasks, consider _multiprocessing_ to bypass the GIL, though threading is often sufficient given MediaPipe's efficiency.
-- **Screen Capture:** _mss_ (Python MSS) for fast screen grabbing across platforms, or _python-mss_ for screen recording. These libraries provide hardware-accelerated screenshot capture.
-- **Recording:** _OpenCV VideoWriter_ or _ffmpeg-python_ for encoding webcam and screen to MP4 files. Support for H.264 codec with configurable bitrate/quality presets.
-- **Back-End (Optional Cloud Features):**
-- **Language & Framework:** _Python_ with FastAPI for the optional API server (if implementing cloud sync features). FastAPI has excellent async support and auto-generated API docs. Can easily interface with OAuth providers and external APIs (Hume, Memories).
-- **Database:** _SQLite_ for local storage (embedded, zero-configuration, perfect for desktop apps). For cloud sync, optionally use _PostgreSQL_ for server-side storage. SQLite schema will match the session_report.json structure with proper indexes for queries.
-- **Memories AI**: If we integrate this service, the desktop app will call their API directly using _requests_ library. Upload session recordings (MP4) via their video upload endpoints, then query their Chat API for structured analysis. This is an optional feature users can enable.
-- **Hume AI:** Call Hume's Expression API directly from the desktop app using their Python SDK or _requests_. API keys stored in encrypted local config. Calls are made periodically (not continuously) to analyze emotional state from webcam frames or audio samples.
-- **Packaging & Distribution:**
-- _PyInstaller_ for creating standalone executables. Bundle all Python dependencies, MediaPipe models, and assets into a single distributable.
-- Platform-specific installers: _create-dmg_ for macOS DMG files, _Inno Setup_ or _WiX_ for Windows MSI/EXE installers, _AppImage_ or _fpm_ for Linux packages.
-- Code signing: macOS (Apple Developer Certificate), Windows (Authenticode certificate) for security and trust.
-- **Edge Processing Philosophy:** The design heavily leans on **edge (on-device) AI**. Modern laptops can handle surprising amounts of ML locally. By running MediaPipe models on-device, we bypass network latency and protect data. MediaPipe models are highly optimized (quantized, compiled) to run in <100MB memory with minimal compute. This approach means most computations happen where the data is produced (the user's machine) rather than shipping all data to cloud.
+**Detection Classes (Image-Only):** {HeadAway, EyesOffScreen, Absent, MicroSleep, PhoneLikely, VideoOnScreen, SocialFeed, Code, Docs, Slides, Terminal, ChatWindow, Games, Unknown}
 
-We do remain cognizant that some users' devices might be underpowered. For them, one could offer a setting "Use Cloud Processing" where session recordings are uploaded to cloud services (Memories.ai/Hume) for analysis instead of attempting local emotion/pattern analysis. This is optional and defaults to off for privacy.
+**Fusion:** Hysteresis over last K snapshots (default K=3) with ≥1 minute span debounce → emits focus_event/distract_event with reason codes. No audio heuristics.
 
-## Trade-Off Analysis: Local vs Cloud Processing
+**Performance Budgets:** CPU avg <30%; RAM <500 MB; snapshot upload rate bounded by SNAPSHOT_INTERVAL_SEC and backoff on 429/5xx.
 
-One of the core architectural decisions is how much to process locally on the desktop vs. send to cloud. We have chosen a **local-first approach** for distraction detection and only send minimal results to cloud when users opt-in. Below is an analysis of this trade-off:
+### Storage, Privacy, and Controls
 
-- **Privacy:** Processing video/audio locally means the user's face, environment, and personal moments are not continuously uploaded. This is a huge privacy win and likely critical for user acceptance (many users would not use an app that streams their webcam all day to a server). In our design, the cloud only sees abstracted events or session recordings if explicitly uploaded. If we went cloud-first (streaming video to analyze on server), we'd introduce significant privacy concerns and require heavy security measures to protect that stream. Local processing thus keeps sensitive data on-device by default, aligning with data sovereignty principles.
-- **Bandwidth:** Continuous video streaming is bandwidth intensive (a 720p video at even 15fps can be hundreds of MBs per hour). Many users have limited or metered connections. Our local processing sends only tiny data (a few bytes per event, occasional API calls for emotion). This is hugely efficient. Even the periodic Hume API image calls are maybe a few KB each. So local-first avoids saturating the network. It also enables offline use; the core detection doesn't depend on internet. In contrast, a cloud approach would break if internet drops.
-- **Latency:** For real-time feedback, local processing is faster. There's near-zero network latency; detection happens in milliseconds on device. If we had to send each frame to cloud and wait for a response, even a 100ms network delay could make feedback sluggish, or worse if connection is slow. Local ensures immediate responsiveness (alerts within 1-2s vs possibly 3-5s or more round-trip for cloud). Low latency is crucial for interrupting distractions effectively.
-- **Device Performance:** On the flip side, doing everything locally consumes the user's CPU/GPU, which could heat up their device or slow other tasks. Cloud processing would offload work from the user's device. For some users on old hardware, local heavy computing might not be feasible. However, given continuous video streaming out is also heavy on the system (encoding video and network I/O also use CPU and battery), the difference may not be that stark. It is known that moving lots of data (like constantly moving frames between CPU, network, memory) is very energy-intensive - over 60% of mobile device energy can be spent just on data movement for tasks like video processing[\[7\]](https://www.researchgate.net/figure/Edge-devices-and-edge-nodes-in-relation-to-the-cloud_fig1_307902195#:~:text=,). So avoiding that by keeping data local can actually **save energy**. We also mitigate performance issues by optimizing our models and using efficient libraries like MediaPipe.
-- **Development Complexity:** Implementing on-device ML with Python is straightforward using mature libraries (MediaPipe, OpenCV, scikit-learn). By contrast, using cloud would require building and maintaining server infrastructure with GPU support. Since one of our goals is minimal complexity and cost, we avoid building a full server-side computer vision pipeline. Modern Python ML libraries provide pre-trained models and high-level APIs. Also, at scale, cloud processing would cost more (running possibly GPU instances for each user's stream), whereas leveraging the user's device is cost-free for us and scales naturally with user base. For a hackathon project and beyond, this is a simpler deployment story (no need to maintain heavy server infrastructure).
-- **Quality of Analysis:** In theory, cloud could host larger, more accurate models than what can run on-device. There is a trade-off in model size. However, the chosen tasks (face detection, gaze, etc.) can be done well with lightweight models like MediaPipe. And with hardware advances, on-device capabilities are growing. If extremely fine-grained analysis was needed (like detailed emotion recognition beyond Hume's scope, or complex scene understanding), cloud might outperform. But our focus is narrow (user's face & voice cues), which is feasible on device with high accuracy. Additionally, by not compressing and streaming video, we avoid any network-induced quality loss or delay that could degrade analysis quality.
+**Privacy Model:** No raw frames leave device except snapshots explicitly uploaded to OpenAI Vision API by design. Full video recordings remain local unless user chooses post-session upload.
 
-In summary, the chosen hybrid approach (local analysis, optional cloud storage of results) maximizes privacy and responsiveness, while minimizing cloud costs. The **only cloud processing** we intentionally use is the specialized emotion AI (Hume) and long-term pattern analysis (Memories.ai), both of which are optional features users can enable. If in the future on-device emotion recognition becomes viable (via a small model), we could move that local too.
+**Developer Settings (Protected Panel or .env/yaml):**
+- SNAPSHOT_INTERVAL_SEC
+- VIDEO_BITRATE_KBPS_CAM, VIDEO_BITRATE_KBPS_SCREEN
+- VIDEO_RES_PROFILE ∈ {Low, Std, High}
+- OPENAI_VISION_ENABLED (default: true, developer-only toggle)
+  - If enabled: Snapshots sent to OpenAI Vision API (normal operation, required for distraction detection)
+  - If disabled: System falls back to local CNN classifier (reduced accuracy, no cloud dependency during sessions)
+  - Note: Fallback mode must be implemented for graceful degradation when OpenAI Vision is unavailable
+- MAX_PARALLEL_UPLOADS
 
-We will provide a user option: if they prefer, they could enable cloud features where session recordings are uploaded to Memories.ai/Hume for detailed analysis (perhaps if their device struggles with local processing or they want deeper insights). But the default will always prioritize local processing. This aligns with an "edge AI" philosophy - bring the model to the data, not data to the model[\[6\]](https://www.researchgate.net/figure/Edge-AI-Vs-Cloud-AI-Architecture_fig1_383420800#:~:text=low%20latency%20and%20low%20energy,).
+**User-Visible Controls:** Pause monitoring; Sensitivity slider; Screen-capture toggle. No user toggle for OpenAI Vision (developer settings only).
 
-## System Architecture Diagram
+### Tech Stack
 
-_(Refer to the figure above for a visual overview.)_ In the diagram, the left side represents the **Desktop Application** and its components (GUI, local ML modules, integrations), while the right side shows the **Optional Cloud Backend** and external services. The data flow is as follows:
+**Desktop Application:**
+- **GUI Framework:** CustomTkinter or PyQt6 for cross-platform UI
+- **Recording:** ffmpeg-python or OpenCV VideoWriter with H.264 codec; developer-settable bitrates via env/yaml (VIDEO_BITRATE_KBPS_*)
+- **Realtime Inference:** OpenAI Vision API (image classification) per snapshot; retry with exponential backoff; local JSON cache
+- **Screen Capture:** mss (Python MSS) for fast screen grabbing
+- **Threading:** Uploader worker pool (MAX_PARALLEL_UPLOADS) separate from capture threads to avoid blocking
+- **Config:** .env or config.yaml; developer mode reveals advanced toggles in UI
+- **Local Storage:** SQLite for structured data (sessions, events, KPIs) and filesystem for recordings
 
-- Video/Audio streams are processed locally by the distraction detection engine. If an event is detected, it's immediately fed back to the user via the UI (alert) and stored in local SQLite database.
-- The desktop app optionally sends **analysis results** or **session recordings** to the backend (dashed arrow - optional feature). This includes distraction events and focus session summaries, or MP4 recordings for post-processing. The backend receives and stores these in the database (and/or forwards to Memories AI service for storage and further pattern computation). The backend never receives raw media unless user explicitly uploads recordings.
-- The desktop app optionally communicates with **Hume AI** (dashed arrow - optional feature) for emotion analysis, sending minimal data (frames or audio snippets) and receiving emotion insights. These insights are used locally and stored in the SQLite database with session events. Hume AI is an external cloud API specialized for this task[\[3\]](https://dev.hume.ai/intro#:~:text=Hume%E2%80%99s%20state,in%20audio%2C%20video%2C%20and%20images).
-- The app or backend integrates with **Calendar/Email APIs** (dashed arrows - optional) as needed. For example, on user request or at session start, the app might pull the user's calendar events to understand what the current focus context is. Similarly, if we implement email parsing for tasks, the app would fetch emails and extract task info. These are optional flows.
-- The backend may also connect to **Memories AI** service (dashed arrow "Pattern Storage" - optional), if we leverage that platform to store and analyze session recordings. The desktop app uploads MP4 files to Memories.ai, which returns structured analysis via their Chat API. Alternatively, local SQLite DB and local analytics fulfill this role. In either case, this component is about long-term memory and pattern mining.
-- Finally, the backend can send aggregated results back to the desktop app (e.g., when the user opens a weekly report view and has cloud sync enabled). In practice, most user-facing alerts and reports are generated locally using SQLite queries; backend-originating messages are only relevant if cloud sync is enabled.
+**Optional Cloud Features:**
+- **Memories.ai:** Upload assets + snapshots via requests library; invoke Chat API with schema prompt; poll job status; fetch JSON response
+- **Hume AI:** Video expression endpoint via Hume Python SDK; poll job status; fetch 1 Hz emotion tracks
+- **Backend API:** Python with FastAPI for optional cloud sync features
 
-The architecture is modular: one could replace Hume AI with another emotion engine, or plug in additional sensors (like a smartwatch for heart rate to detect stress) into the desktop app, without overhauling the whole system. The clean separation ensures that the **desktop application is doing real-time interactive work**, while the **optional backend does storage, synchronization, and heavy analysis offline**. This division minimizes latency and maximizes privacy.
+**Packaging & Distribution:**
+- PyInstaller for creating standalone executables
+- Platform-specific installers: create-dmg (macOS), Inno Setup/WiX (Windows), AppImage/fpm (Linux)
+- Code signing: Apple Developer Certificate (macOS), Authenticode certificate (Windows)
+
+### Network and Bandwidth
+
+**Network During Sessions:** Required for snapshot uploads to OpenAI Vision; sustained outbound traffic at interval cadence.
+
+**Encryption:** HTTPS/TLS for all snapshot uploads; signed URLs for post-processing artifact transfers.
+
+**Bandwidth Caps:** Enforce per-session cap; pre-flight estimate based on snapshot count × JPEG avg + video bitrate × duration; adaptive JPEG quality to remain within cap.
+
+**Retention:** Raw cam.mp4/screen.mp4 and snapshots deleted after successful Memories/Hume merge if Auto-delete enabled; retention window configurable (0/24h/7d).
 
 ## Risks & Open Issues
 
@@ -224,212 +349,176 @@ The architecture is modular: one could replace Hume AI with another emotion engi
 - **Integration Complexity:** Calendar and email integrations, if enabled, have to handle various user contexts and errors (auth tokens expiring, conflicting events, etc.). Since these are optional, it's acceptable if initially they are somewhat basic (e.g., only Google Calendar supported in MVP). We note the risk that these can consume development time without being core to the prototype; hence they are scoped as stretch goals.
 - **Performance on Different Devices:** There's variability in user hardware. On a high-end PC, everything might run smoothly, but on an older laptop or a budget tablet, real-time video analysis could lag. We plan to test on a range of devices and provide settings to reduce load. If necessary, we may use a simpler detection method for low-end devices (e.g., just detect face presence and large movements, skipping fine gaze tracking). Ensuring wide compatibility is a risk but manageable with feature scaling.
 - **Third-Party Dependency Reliability:** Our solution relies on Hume AI and possibly Memories AI. If these services have downtime or change their API, it could affect our app. To mitigate, we will implement graceful fallbacks - e.g., if Hume is unreachable, the app continues without emotion input (and maybe informs the user that emotion features are temporarily unavailable). For Memories AI, if not using it, we can rely on our own DB. Essentially, the core loop doesn't break if those services fail; only some enhanced features do. We also should consider cost: Hume API calls might incur cost per request, which could become expensive if done too frequently. We will limit usage to stay within a free tier or a predictable budget.
+- **Recording Compatibility:** Ensuring MP4/H.264 codec support across all platforms via OpenCV and ffmpeg-python is critical. We will implement fallback mechanisms to platform-specific codecs if the default encoding fails, ensuring sessions can always be recorded even on systems with limited codec support.
+- **Upload Size/Time:** Long focus sessions can produce large video files (potentially GBs for multi-hour sessions), which may take significant time to upload. We will enforce per-session file size caps, implement chunked uploads with resumable transport to handle network interruptions, and expose upload progress with estimated time remaining (ETA) to manage user expectations.
+- **OpenAI Vision / Memories / Hume API Quotas:** All external APIs have rate limits and quotas. We will enforce sampling rates and quality profile presets to stay within limits, implement exponential backoff when receiving 429 (rate limit) responses, and queue jobs when quotas are temporarily exhausted to ensure graceful degradation rather than hard failures.
+- **LLM Hallucination in Post-Processing:** When using Memories.ai Chat API or other LLM-based analysis for generating session reports, there's risk of hallucinated or inaccurate inferences. We will constrain outputs with strict JSON schema validation, add confidence scoring per field, and surface uncertainty indicators to users when the system's confidence is low, preventing misleading recommendations.
 
-Insert the following into your PRD. Do not rewrite prior sections; splice these where indicated.
+## Hackathon Demo Script
 
-# 1) Architecture split (replace "Technical Architecture" header)
+This section provides a tested 5-minute demo narrative that showcases the product's key features and emotional impact for hackathon judges.
 
-## Runtime Topology
+### Demo Narrative (5 Minutes)
 
-- **Realtime (On-Device, Local Processing):**
-  - Inputs: webcam frames via OpenCV; optional screen frames via mss library.
-  - Ops: image-only inference for posture, activity, and screen-content classification using MediaPipe and local ML models. No LLM/VLM calls. No cloud I/O during realtime processing.
-  - Outputs: timestamped event stream (focus/distract, posture state, active app class) stored in SQLite database; optional low-freq thumbnails for local audit only.
-- **Post-Processing (End-of-session, optional cloud features):**
-  - Inputs: two MP4s saved locally—cam.mp4 (user) and screen.mp4 (display)—default 480p, configurable bitrate.
-  - Upload targets (optional): **Memories.ai** (primary) + **Hume AI** (expression timeline).
-  - Ops: Memories Chat API runs LLM/VLM over the two videos to extract structured session summaries; Hume produces expression tracks.
-  - Outputs: normalized JSON report (session_report.json) persisted in local SQLite database and optionally synced to cloud; links to Memories objects; expression timeline merged.
+**Minute 0-1: The Problem (Personal & Relatable)**
 
-## Data Flow Summary
+"Hi, I'm [name], and I have ADHD. When I sit down to work, I start with great intentions. But 20 minutes later, I realize I've been scrolling Twitter without even noticing the transition. By the time I catch myself, my focus is gone and my productivity is shot.
 
-- **Session start:** user grants camera permissions via system dialogs; optional screen capture; choose quality profile.
-- **Realtime loop:** CV-only metrics at 1-5 Hz processed in background threads; desktop UI notifications/nudges; SQLite storage; zero network activity.
-- **Session end:** stop capture; finalize two MP4s locally; optionally upload if cloud features enabled; trigger post-processing jobs; generate session_report.json; display in desktop dashboard.
+Traditional tools like website blockers don't work because they don't understand *me* - they don't know when I'm actually focused vs. when I'm vulnerable to distraction. I need something that watches my patterns and catches me before I fall down the rabbit hole.
 
-# 2) Realtime module (new subsection under "Functional Requirements")
+That's why we built Focus Guardian."
 
-## FR1a. Realtime CV Pipeline (On-Device)
+**Minute 1-2: The Solution (Live Demo)**
 
-- **Frame cadence:** 1-5 Hz webcam; 0.2-1 Hz screen snapshot; both downscaled to target (default 480p, min 256p).
-- **Posture:** MediaPipe BlazeFace/FaceMesh + head-pose; optional BlazePose upper-body. States: {neutral, slouch, head-down, head-away, out-of-frame, micro-sleep}.
-- **Activity:** heuristics on motion vectors + face/eye features; classify {focused, reading, typing-like, phone-likely, talking, absent}.
-- **Screen content (image classification, not OCR):** window archetypes via lightweight CNN (using ONNX Runtime Python or TensorFlow Lite): {IDE/docs/terminal/slides/video/short-video/social/feed/chat/games/unknown}.
-- **Fusion:** hysteresis state machine with debounce (≥5 s) to reduce false positives; emits focus_event and distract_event with reason codes.
-- **Device budgets:** CPU avg <30%; memory <300 MB; auto-throttle frame rate on perf drop.
+"Let me show you how it works. I'm going to start a focus session - my goal is to work on this presentation."
 
-## FR1b. Realtime Storage & Privacy
+[Start session in app]
+[UI shows: "Focus mode active - Working on presentation"]
 
-- No raw frames leave device.
-- Ring buffer: last N thumbnails (default N=0; off by default).
-- SQLite: transient event stream stored locally; auto-purge after successful cloud sync.
-- Controls: Pause, Sensitivity slider, Screen-capture toggle.
+"For the next 2 minutes, watch what happens..."
 
-# 3) Post-processing pipeline (new subsection under "Functional Requirements")
+[30 seconds: Actually work on slides, typing, focused]
+[Then casually switch to Twitter, scroll for ~90 seconds]
 
-## FR7. End-of-Session Upload & Jobs
+[Alert notification appears]: "**Distraction Detected:** Social feed - 3 minutes"
 
-- **Recording:** two local files-cam.mp4, screen.mp4; container MP4/H.264; default 480p@15fps; VBR target 300-800 kbps (config: Low/Std/High).
-- **Upload order:** (1) Memories.ai objects {cam, screen}; (2) Hume video expression analysis on cam.
-- **Jobs:**
-  - **Memories Chat API Prompt:** "Given cam and screen, segment the work session; infer task phases, app classes, distraction intervals, triggers, break taxonomy; extract step-level actions; output in schema v1.2."
-  - **Hume Expressions:** derive time-series for valence, arousal, stress, frustration; resample to 1 Hz; align to segments.
-  - **Merger:** join on timestamps; compute per-segment KPIs; persist session_report.json.
+"See that? The system detected I switched from focused work to distraction. It took 2-3 minutes to confirm this wasn't just a brief glance - it's a real distraction pattern. That's deliberate - we use K=3 hysteresis to avoid false alarms."
 
-## FR7a. Structured Output Schema (v1.2)
+[Click back to work]
 
-{
+**Minute 2-3: The Intelligence Layer (Report Walkthrough)**
 
-"session_id": "uuid",
+[End session, show report]
 
-"meta": { "started_at": "iso", "ended_at": "iso", "profile": "Low|Std|High" },
+"Now here's where it gets interesting. This isn't just a simple tracker - it's an intelligence system."
 
-"segments": \[
+[Point to session report on screen]:
 
-{
+```
+Session Report - 10 minutes
+├─ Focus ratio: 70%
+├─ Distractions detected: 1 event
+│  └─ Type: Social media (Twitter)
+│  └─ Duration: 3 minutes
+│  └─ Detected at: 14:32
+└─ Pattern Analysis:
+   └─ Screen content: SocialFeed (confidence: 0.92)
+   └─ Camera: EyesOffScreen → Focused (returned after alert)
+```
 
-"t0":"s","t1":"s","label":"Focus|Break|Admin|Setup",
+"The system knows not just *that* I got distracted, but *how* - it saw the social media feed on my screen and tracked when I looked away from productive work."
 
-"task_hypothesis":"string",
+**Minute 3-4: The Emotional Intelligence (The Wow Moment)**
 
-"apps":\[{"class":"IDE|Docs|Browser|Video|Social|Chat|Slides|Terminal|Unknown","share":0.0}\],
+[Show emotion analysis timeline if available]:
 
-"distractions":\[{"t0":"s","t1":"s","type":"LookAway|Phone|Video|Social|Chat|Noise","evidence":"string"}\],
+"But here's the really powerful part. After the session, I can optionally upload the video for emotion analysis."
 
-"posture":{"mode":"Neutral|Slouch|HeadAway|Down|Absent","pct":0.0},
+[Show Hume AI emotion timeline graph]:
 
-"expressions":{"frustration_mean":0.0,"valence_mean":0.0,"arousal_mean":0.0}
+```
+Emotion Timeline:
+Frustration ████░░░░░░░░ (peaks at 14:30, then drops)
+Boredom     ░░░░░░██████ (rises during distraction)
+Focus       ██████░░░░░░ (high, then drops)
+```
 
-}
+"Look at this - my frustration spiked 2 minutes *before* I got distracted. I didn't even realize I was frustrated. The AI caught the pattern: frustration → distraction. That's the trigger.
 
-\],
+Over time, Focus Guardian learns these patterns for each person. Maybe for you it's boredom, not frustration. Maybe it's time of day. The system adapts."
 
-"kpis":{
+**Minute 4-5: The Long-Term Vision & Impact**
 
-"focus_ratio":0.0,"avg_focus_bout_min":0.0,"num_alerts":0,
+"After a week of using this, here's what the system told me:"
 
-"top_triggers":\["Video","Phone","HeadAway"\],"peak_distraction_hour":"15:00-16:00"
+[Show weekly insights]:
 
-},
+```
+Weekly Patterns:
+• You're most vulnerable to distraction at 3-4pm
+• Trigger: Frustration peaks before 73% of distractions
+• Your average focus bout: 22 minutes
+• Recommendation: Schedule 5-minute breaks at 2:55pm daily
+```
 
-"recommendations":\[{"type":"BreakSchedule|AppBlock|TaskSplit|Ergonomics","msg":"string"}\],
+"This is personalized coaching based on *my actual behavior*, not generic productivity advice.
 
-"artifacts":{"memories_urls":{"cam":"url","screen":"url"},"hume_job_id":"string"}
+The technical approach is snapshot-based vision AI - we capture webcam and screen images every 60 seconds, send them to OpenAI's Vision API for classification, then use hysteresis voting to confirm patterns. Post-session, Hume AI provides emotion analysis. It's privacy-conscious: snapshots are analyzed, not continuous video streams."
 
-}
+**The Closing (30 seconds):**
 
-# 4) UX changes (append to "Minimal Setup & Desktop Application UX")
+"Focus Guardian doesn't just tell you you're distracted - it understands *why* you get distracted, *when* you're most vulnerable, and *how* to help you build better habits.
 
-- **Quality presets:** Low (256p/10fps/200 kbps), Standard (480p/15fps/500 kbps), High (720p/15fps/1000 kbps).
-- **Screen capture scope:** full screen or single window; default: single window.
-- **Session end modal:** show file sizes estimate; toggle "Upload now / Defer"; show privacy note ("raw video stored locally until upload; deleted after successful processing if 'Auto-delete' is on").
-- **Reports tab:** render session_report.json timeline; filters by segment, trigger, posture; export CSV/JSON.
+For people with ADHD like me, that's life-changing.
 
-# 5) Tech stack deltas (append to "Tech Stack Considerations")
+**It knows me better than I know myself.**"
 
-- **Recording:** OpenCV VideoWriter or ffmpeg-python for MP4/H.264 encoding; separate video streams for webcam and screen; native H.264 codec support across all platforms.
-- **Realtime CV:** MediaPipe FaceMesh/BlazePose via Python bindings; head-pose (PnP on landmarks) via OpenCV (cv2); small CNN for screen archetypes (~3-5M params, int8) using ONNX Runtime Python or TensorFlow Lite.
-- **Post-proc calls:**
-  - **Memories.ai:** Upload two assets via requests library; invoke Chat API with schema prompt; poll job status; fetch JSON response.
-  - **Hume:** Video expression endpoint via Hume Python SDK; poll job status; fetch 1 Hz emotion tracks.
-- **Backend (Optional):** FastAPI server for API keys proxy + webhook receivers; PostgreSQL for session_report cloud storage; signed URLs to artifacts; no raw media retention after confirmation.
-- **Threading:** Python threading module for concurrent operations (video analysis, audio monitoring, screen capture, API calls); multiprocessing for CPU-intensive tasks if needed.
+[End with product name + tagline on screen]
 
-# 6) Privacy, retention, and bandwidth (new subsection under "Non-Functional Requirements")
+### Demo Preparation Checklist
 
-- **Default retention:** raw cam.mp4 and screen.mp4 deleted after successful upload + report merge; retention window configurable (0, 24h, 7d).
-- **Local-only mode:** skip uploads; produce local report using cached embeddings/thumbnails only; disables Hume and Memories features.
-- **Bandwidth caps:** hard cap per session (e.g., 300 MB) with adaptive transcode before upload; warn user if projected size exceeds cap.
-- **Auditability:** user can preview clips tied to flagged distraction intervals before upload.
+**Technical Setup:**
+- [ ] Pre-record a backup video demo in case live demo fails
+- [ ] Test OpenAI Vision API connectivity and latency
+- [ ] Prepare a sample session report with realistic data
+- [ ] Have Hume emotion timeline graph ready (can be pre-generated)
+- [ ] Test camera permissions on presentation laptop
+- [ ] Ensure Twitter/social media is accessible for live demo
 
-# 7) Evals and ablations (map to rubric; add under "Objectives & Success Metrics" or separate "Evals")
+**Content Setup:**
+- [ ] Prepare presentation slides to "work on" during demo
+- [ ] Have Twitter open in another tab for easy switch
+- [ ] Practice the 2-3 minute timing for distraction detection
+- [ ] Rehearse the emotion timeline explanation (most impactful moment)
 
-- **Latency eval:** alert time (event→nudge) p95 < 1.5 s.
-- **Accuracy eval:** posture confusion matrix; screen archetype F1 ≥ 0.85 on held-out clip set.
-- **Ablation:** disable posture; measure Δfocus_ratio; disable screen archetype; measure Δfalse-positives; show charts in README.
-- **Load test:** 2-hour session on mid-tier laptop; CPU mean <30%, dropped-frame rate <10%.
-- **Cost awareness:** per session API cost target <\$0.05 at Std profile (Memories + Hume), with sampling gates.
+**Backup Plans:**
+- [ ] If API fails: Use pre-recorded demo video
+- [ ] If emotion analysis unavailable: Focus on snapshot detection
+- [ ] If timing is off: Have pre-generated alerts ready to trigger
 
-# 8) Agentic behavior hooks (append under "Goal Management and Agentic Assistance")
+### Judge Q&A Preparation
 
-- **Realtime hooks:** if distract_event count ≥ N in 20 min, auto-suggest micro-break; if screen:video appears during focus, prompt to switch back; if posture "Slouch/HeadDown" >60% of last 10 min and frustration↑, suggest posture reset + 2-min reset.
-- **Post-proc hooks:** recommendations generated from session_report.kpis + rules; offer one-click plan (Pomodoro length, blocklist suggestion, break slots).
+**Expected Questions:**
 
-# 9) API contracts (new appendix)
+Q: "What if I just want to check something quickly? Won't it flag that as distraction?"
+A: "Great question! That's why we use K=3 hysteresis - it needs 3 snapshots over 2+ minutes to confirm distraction. Quick checks don't trigger alerts."
 
-### POST /api/session/start
+Q: "Isn't this expensive with all the API calls?"
+A: "We're transparent about costs: ~$2.40 for a 2-hour session at standard quality. Users can adjust frequency to control costs. For hackathon, we're showing the technical feasibility; production could include subscription pricing."
 
-- Body: { quality:"Low|Std|High", screen:true|false }
-- Resp: { session_id }
+Q: "Privacy concerns - you're uploading camera snapshots?"
+A: "Yes, we're honest about this: periodic snapshots go to OpenAI for analysis. Full video stays local. Users control post-session uploads. We chose transparency over misleading 'fully private' claims."
 
-### POST /api/session/end
+Q: "Why 2-3 minutes latency? Can't you do it faster?"
+A: "We could, but we deliberately chose accuracy over speed. Brief glances shouldn't trigger alerts. The 2-3 minute window eliminates false positives and feels supportive, not punitive."
 
-- Body: { session_id, metrics:{…} }
-- Side effects: initiate uploads; return job ids.
+Q: "What makes this better than existing productivity apps?"
+A: "Three things: 1) Understands *your* specific patterns, not generic rules, 2) Correlates emotions with behavior - catches triggers, 3) Learns and adapts over time. It's personalized coaching, not just tracking."
 
-### POST /api/upload
+### Technical Talking Points
 
-- Multipart: cam.mp4, screen.mp4, session_id
-- Resp: { memories_ids:{cam,screen} }
+**Architecture Clarity:**
+- Snapshot-based pipeline (60s intervals)
+- K=3 hysteresis voting for pattern confirmation
+- OpenAI Vision API for real-time classification
+- Post-session Hume AI for emotion analysis
+- Local SQLite storage, optional cloud sync
 
-### POST /api/process
+**AI/ML Innovation:**
+- Multi-modal analysis (camera + screen content)
+- Temporal pattern recognition (hysteresis state machine)
+- Emotion-behavior correlation
+- Personalized learning from long-term data
 
-- Body: { session_id, memories_ids, hume_job_id? }
-- Resp: { report_url, status }
-
-### GET /api/report/:session_id
-
-- Resp: session_report.json
-
-# 10) Sequence diagrams (textual; add as appendix)
-
-**Realtime**
-
-User -> DesktopApp: Start session
-
-DesktopApp -> Camera/Screen: OpenCV VideoCapture / mss screen capture
-
-DesktopApp (Background Thread): CV loop (posture/activity/screen-class) @ 1-5 Hz
-
-Background Thread -> UI Thread: events (focus/distract) with reasons via Queue
-
-UI Thread -> User: desktop notifications/nudges (debounced)
-
-**Post-processing**
-
-User -> DesktopApp: End session
-
-DesktopApp: finalize cam.mp4 + screen.mp4 locally
-
-DesktopApp -> Backend (Optional): upload(cam, screen) via requests
-
-Backend -> Memories.ai: store assets
-
-Backend -> Hume: submit cam.mp4 for expressions
-
-Backend: poll jobs, merge outputs -> session_report.json
-
-Backend -> DesktopApp: report ready (stored in local SQLite)
-
-# 11) Risks deltas (append to "Risks & Open Issues")
-
-- **Recording compatibility:** MP4/H.264 codec support via OpenCV and ffmpeg-python; fallback to platform-specific codecs if needed.
-- **Upload size/time:** long sessions produce large files; enforce caps, chunked uploads, resumable transport; expose ETA.
-- **Memories/Hume quotas:** enforce sampling and profile presets; backoff on 429; queue jobs.
-- **LLM hallucination in post-proc:** constrain with strict schema; add validation; surface "confidence" per field.
-
-# 12) README/demo checklist (for "Completeness & Reliability")
-
-- One-command setup (pip/uv install + .env template).
-- Demo script: 10-min session; end; show report.
-- Evals notebook: latency, CPU, F1, ablations.
-- Privacy doc: data paths, toggles, retention table.
-
-This integration preserves your original privacy stance, meets hackathon rubric criteria (architecture clarity, autonomy, memory, affect, evals), and bounds complexity by pushing LLM/VLM to post-processing while keeping realtime edge CV lightweight.
+**Production Readiness:**
+- Cost model defined ($48-144/month depending on usage)
+- Privacy model transparent (snapshot uploads disclosed)
+- Cross-platform desktop app (PyInstaller)
+- Scalable architecture (edge processing + cloud intelligence)
 
 ## Conclusion
 
-The Focus Guardian ADHD Distraction Analysis App is a comprehensive solution that combines real-time on-device AI with cloud-assisted long-term analysis. By addressing distraction at the moment it occurs and learning from each user's patterns, it aims to provide a personalized coach for improving focus. The design balances **cutting-edge tech** (emotion AI, semantic memory) with **practical considerations** (privacy, simplicity, efficiency), making the product both innovative and user-friendly. If successfully implemented, this app could significantly help users with ADHD (and even those without it) to understand their attention habits and foster better work/study routines.
+The Focus Guardian ADHD Distraction Analysis App is a comprehensive solution that combines snapshot-based cloud vision AI for real-time pattern detection with optional post-session analysis. By addressing distraction at the moment it occurs and learning from each user's patterns, it aims to provide a personalized coach for improving focus. The design balances **cutting-edge tech** (emotion AI, semantic memory) with **practical considerations** (privacy, simplicity, efficiency), making the product both innovative and user-friendly. If successfully implemented, this app could significantly help users with ADHD (and even those without it) to understand their attention habits and foster better work/study routines.
 
 With the above requirements and architecture, the next steps would be prototyping the core detection functionality, user testing for feedback on alerts, and iterating on the model accuracy and UX. Ultimately, Focus Guardian seeks to empower users by **externalizing some of the executive function** - detecting lapses in attention and guiding the user back - thereby augmenting their ability to stay on task and achieve their goals.
 
