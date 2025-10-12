@@ -1,4 +1,81 @@
-Global Multi-Modal Hackathon.pdf
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
-IMG_8325.MOV
+Thumbs.db
+
+# User data directory (sensitive local data)
+data/
+!data/.gitkeep
+
+# Encrypted config
+config.encrypted.json
+
+# Environment variables
 .env
+config.yaml
+
+# Logs
+*.log
+
+# Video files
+*.mp4
+*.avi
+*.mov
+
+# Images
+*.jpg
+*.jpeg
+*.png
+!assets/icons/**/*.png
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# PyInstaller
+*.spec
+build/
+dist/
+
+# Hackathon specific
+Global Multi-Modal Hackathon.pdf
+IMG_8325.MOV
+
+# Session data
+sessions/
+reports/

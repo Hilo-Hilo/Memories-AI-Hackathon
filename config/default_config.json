@@ -1,0 +1,18 @@
+{
+  "snapshot_interval_sec": 5,
+  "video_bitrate_kbps_cam": 500,
+  "video_bitrate_kbps_screen": 1000,
+  "video_res_profile": "Std",
+  "max_parallel_uploads": 3,
+  "openai_vision_enabled": true,
+  "K_hysteresis": 3,
+  "min_span_minutes": 0.15,
+  "alert_sound_enabled": true,
+  "data_retention_days": 30,
+  "upload_timeout_sec": 30,
+  "retry_max_attempts": 3,
+  "retry_backoff_factor": 2.0,
+  "queue_max_size": 100,
+  "session_auto_save_interval_sec": 60
+}
+

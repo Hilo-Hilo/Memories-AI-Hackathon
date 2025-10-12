@@ -5,27 +5,49 @@ description = "Focus Guardian - ADHD distraction analysis desktop application wi
 requires-python = ">=3.10"
 dependencies = [
     # Core Application
-    "openai>=1.0.0",
+    "PyQt6>=6.6.0",
+    "PyQt6-Qt6>=6.6.0",
+    
+    # Video & Image Processing
     "opencv-python>=4.8.0",
-    "ffmpeg-python>=0.2.0",
     "mss>=9.0.0",
-    "customtkinter>=5.2.0",
-    "pillow>=10.0.0",
+    "ffmpeg-python>=0.2.0",
+    "Pillow>=10.0.0",
     "numpy>=1.24.0",
-    # Optional Cloud Services
-    "hume>=0.5.0",
+    
+    # AI & ML Integrations
+    "openai>=1.0.0",
+    "hume>=0.12.0",
     "requests>=2.31.0",
-    # Data & Storage
+    
+    # Calendar Integration
+    "google-auth-oauthlib>=1.2.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-api-python-client>=2.100.0",
+    
+    # Configuration & Security
     "python-dotenv>=1.0.0",
+    "PyYAML>=6.0.0",
     "cryptography>=41.0.0",
+    "keyring>=24.0.0",
+    
+    # Performance & Monitoring
+    "psutil>=5.9.0",
+    "tqdm>=4.66.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
+    "pytest-qt>=4.2.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+
+dist = [
     "pyinstaller>=6.0.0",
+    "pyinstaller-hooks-contrib>=2023.10",
 ]
 
 [build-system]
@@ -33,4 +55,18 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/memories_ai_app"]
+packages = ["src/focus_guardian"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
