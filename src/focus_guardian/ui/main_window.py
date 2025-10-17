@@ -473,10 +473,14 @@ class MainWindow(QMainWindow):
             self.session_total_paused_seconds = 0
             self.status_bar.showMessage("Session stopped")
             
-            # Stop session manager
+            # Stop session manager and get report
             try:
-                self.session_manager.stop_session()
-                logger.info("Session manager stopped")
+                stopped_session_id = self.session_manager.stop_session()
+                logger.info(f"Session manager stopped: {stopped_session_id}")
+                
+                # Show session summary
+                if stopped_session_id:
+                    self._show_session_summary(stopped_session_id)
             except Exception as e:
                 logger.error(f"Failed to stop session: {e}", exc_info=True)
     
@@ -577,6 +581,54 @@ class MainWindow(QMainWindow):
             message,
             QMessageBox.StandardButton.Ok
         )
+    
+    def _show_session_summary(self, session_id: str):
+        """Show session summary report after session ends."""
+        try:
+            # Get report from database
+            report_data = self.database.get_session_report(session_id)
+            
+            if not report_data:
+                logger.warning("No report available for session")
+                return
+            
+            # Extract key metrics
+            kpis = report_data.get("kpis", {})
+            meta = report_data.get("meta", {})
+            recommendations = report_data.get("recommendations", [])
+            
+            # Build summary message
+            duration = meta.get("total_duration_minutes", 0)
+            focus_ratio = kpis.get("focus_ratio", 0) * 100
+            num_alerts = kpis.get("num_alerts", 0)
+            avg_focus = kpis.get("avg_focus_bout_min", 0)
+            
+            summary = f"""<h2>Session Summary</h2>
+<p><b>Duration:</b> {duration:.1f} minutes</p>
+<p><b>Focus Ratio:</b> {focus_ratio:.0f}%</p>
+<p><b>Distractions Detected:</b> {num_alerts}</p>
+<p><b>Average Focus Bout:</b> {avg_focus:.1f} minutes</p>"""
+            
+            if kpis.get("top_triggers"):
+                triggers = ", ".join(kpis["top_triggers"])
+                summary += f"<p><b>Top Distractors:</b> {triggers}</p>"
+            
+            if recommendations:
+                summary += "<h3>Recommendations:</h3><ul>"
+                for rec in recommendations[:3]:  # Show top 3
+                    summary += f"<li>{rec.get('message', '')}</li>"
+                summary += "</ul>"
+            
+            # Show dialog
+            QMessageBox.information(
+                self,
+                "Session Complete",
+                summary,
+                QMessageBox.StandardButton.Ok
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to show session summary: {e}", exc_info=True)
     
     def _show_about(self):
         """Show about dialog."""

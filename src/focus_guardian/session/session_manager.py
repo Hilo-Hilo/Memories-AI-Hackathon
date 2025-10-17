@@ -21,6 +21,9 @@ from ..capture.snapshot_uploader import SnapshotUploader
 from ..analysis.fusion_engine import FusionEngine
 from ..analysis.distraction_detector import DistractionDetector
 from ..integrations.openai_vision_client import OpenAIVisionClient
+from ..integrations.hume_client import HumeExpressionClient
+from ..integrations.memories_client import MemoriesClient
+from ..session.report_generator import ReportGenerator
 from ..utils.queue_manager import QueueManager
 from ..utils.logger import get_logger
 
@@ -57,6 +60,14 @@ class SessionManager:
         self.fusion_engine: Optional[FusionEngine] = None
         self.distraction_detector: Optional[DistractionDetector] = None
         self.vision_client: Optional[OpenAIVisionClient] = None
+        
+        # Post-processing clients (optional)
+        self.hume_client: Optional[HumeExpressionClient] = None
+        self.memories_client: Optional[MemoriesClient] = None
+        self.report_generator: Optional[ReportGenerator] = None
+        
+        # Initialize post-processing clients if API keys available
+        self._initialize_post_processing_clients()
         
         logger.info("Session manager initialized")
     
@@ -212,6 +223,33 @@ class SessionManager:
         
         logger.info("All components initialized")
     
+    def _initialize_post_processing_clients(self) -> None:
+        """Initialize optional post-processing clients."""
+        # Hume AI client
+        hume_key = self.config.get_hume_api_key()
+        if hume_key:
+            try:
+                self.hume_client = HumeExpressionClient(api_key=hume_key)
+                logger.info("Hume AI client initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Hume AI client: {e}")
+        
+        # Memories.ai client
+        mem_key = self.config.get_memories_api_key()
+        if mem_key:
+            try:
+                self.memories_client = MemoriesClient(api_key=mem_key)
+                logger.info("Memories.ai client initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Memories.ai client: {e}")
+        
+        # Report generator
+        self.report_generator = ReportGenerator(
+            database=self.database,
+            hume_client=self.hume_client,
+            memories_client=self.memories_client
+        )
+    
     def _start_components(self) -> None:
         """Start all session components in correct order."""
         logger.info("Starting session components...")
@@ -285,8 +323,13 @@ class SessionManager:
         
         logger.info("Session resumed")
     
-    def stop_session(self) -> None:
-        """Stop the current session and cleanup."""
+    def stop_session(self) -> Optional[str]:
+        """
+        Stop the current session and cleanup.
+        
+        Returns:
+            Session ID of stopped session
+        """
         if not self.current_session:
             raise RuntimeError("No active session to stop")
         
@@ -333,11 +376,36 @@ class SessionManager:
             f"{stats['total_events']} distractions"
         )
         
+        # Generate session report
+        if self.report_generator:
+            try:
+                logger.info("Generating session report...")
+                report = self.report_generator.generate(
+                    session_id=self.current_session_id,
+                    data_dir=self.config.get_data_dir()
+                )
+                
+                # Export to JSON file
+                reports_dir = self.config.get_reports_dir()
+                report_path = reports_dir / f"{self.current_session_id}_report.json"
+                self.report_generator.export_to_json(report, report_path)
+                
+                logger.info(f"Session report generated: {report_path}")
+                
+                # TODO: Optionally run cloud analysis (Hume AI, Memories.ai)
+                # This could be done in background after session ends
+                
+            except Exception as e:
+                logger.error(f"Failed to generate report: {e}", exc_info=True)
+        
         # Cleanup
+        session_id_for_return = self.current_session_id
         self.current_session = None
         self.current_session_id = None
         
         logger.info("Session stopped successfully")
+        
+        return session_id_for_return
     
     def get_session_stats(self) -> dict:
         """Get current session statistics."""
