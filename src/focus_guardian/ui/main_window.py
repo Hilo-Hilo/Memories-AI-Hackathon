@@ -8,7 +8,7 @@ and tabbed interface for dashboard, reports, and settings.
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QPushButton, QLabel, QStatusBar,
-    QSystemTrayIcon, QMenu, QMessageBox
+    QSystemTrayIcon, QMenu, QMessageBox, QApplication
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
@@ -258,50 +258,341 @@ class MainWindow(QMainWindow):
     
     def _create_settings_tab(self) -> QWidget:
         """Create settings tab for configuration."""
+        from PyQt6.QtWidgets import QComboBox, QGroupBox, QFormLayout
+        from ..capture.screen_capture import WebcamCapture
+
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        
+        layout.setSpacing(20)
+
         label = QLabel("Settings")
         label.setStyleSheet("font-size: 20px; font-weight: bold;")
         layout.addWidget(label)
-        
+
+        # Camera Selection section
+        camera_group = QGroupBox("Webcam Selection")
+        camera_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        camera_layout = QFormLayout(camera_group)
+
+        # INFO: Don't enumerate cameras on startup to avoid activating Continuity Camera
+        # User must click "Refresh List" to scan for cameras
+
+        # Camera dropdown - start with only saved config
+        self.camera_combo = QComboBox()
+        self.camera_combo.addItem("Auto-detect (FaceTime HD)", -1)
+
+        # Add saved camera from config if it's not auto-detect
+        saved_index = self.config.get_camera_index()
+        saved_name = self.config.get_camera_name()
+        if saved_index != -1:
+            self.camera_combo.addItem(f"{saved_name}", saved_index)
+
+        # Set current selection to saved config
+        combo_index = self.camera_combo.findData(saved_index)
+        if combo_index >= 0:
+            self.camera_combo.setCurrentIndex(combo_index)
+
+        self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
+        camera_layout.addRow("Camera:", self.camera_combo)
+
+        # Instruction label
+        instruction_label = QLabel(
+            "Click 'Refresh List' to scan for available cameras"
+        )
+        instruction_label.setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;")
+        camera_layout.addRow("", instruction_label)
+
+        # Camera status label
+        self.camera_status_label = QLabel(
+            f"✓ Current: {self.config.get_camera_name()}"
+        )
+        self.camera_status_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+        camera_layout.addRow("Status:", self.camera_status_label)
+
+        # Buttons in horizontal layout
+        button_layout = QHBoxLayout()
+
+        # Preview button
+        preview_btn = QPushButton("Show Live Preview")
+        preview_btn.clicked.connect(self._show_camera_preview)
+        preview_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #229954;
+            }
+        """)
+        button_layout.addWidget(preview_btn)
+
+        # Refresh button
+        refresh_btn = QPushButton("Refresh List")
+        refresh_btn.clicked.connect(self._refresh_camera_list)
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        button_layout.addWidget(refresh_btn)
+
+        camera_layout.addRow("", button_layout)
+
+        layout.addWidget(camera_group)
+
         # API Keys section
-        api_section = QLabel("API Configuration")
-        api_section.setStyleSheet("font-size: 16px; font-weight: bold; margin-top: 20px;")
-        layout.addWidget(api_section)
-        
+        api_group = QGroupBox("API Configuration")
+        api_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        api_layout = QVBoxLayout(api_group)
+
         # Check API keys
         openai_key = self.config.get_openai_api_key()
         hume_key = self.config.get_hume_api_key()
         mem_key = self.config.get_memories_api_key()
-        
+
         openai_status = QLabel(
             f"OpenAI: {'✓ Configured' if openai_key else '✗ Not configured'}"
         )
         openai_status.setStyleSheet(
             f"color: {'#27ae60' if openai_key else '#e74c3c'}; font-size: 14px;"
         )
-        layout.addWidget(openai_status)
-        
+        api_layout.addWidget(openai_status)
+
         hume_status = QLabel(
             f"Hume AI: {'✓ Configured' if hume_key else '✗ Not configured'}"
         )
         hume_status.setStyleSheet(
             f"color: {'#27ae60' if hume_key else '#e74c3c'}; font-size: 14px;"
         )
-        layout.addWidget(hume_status)
-        
+        api_layout.addWidget(hume_status)
+
         mem_status = QLabel(
             f"Memories.ai: {'✓ Configured' if mem_key else '✗ Not configured'}"
         )
         mem_status.setStyleSheet(
             f"color: {'#27ae60' if mem_key else '#e74c3c'}; font-size: 14px;"
         )
-        layout.addWidget(mem_status)
-        
+        api_layout.addWidget(mem_status)
+
+        layout.addWidget(api_group)
+
         layout.addStretch()
-        
+
         return widget
+
+    def _on_camera_changed(self, index: int):
+        """Handle camera selection change."""
+        camera_index = self.camera_combo.itemData(index)
+        camera_name = self.camera_combo.itemText(index)
+
+        # Save to config
+        self.config.set_camera_config(camera_index, camera_name)
+
+        # Update status
+        self.camera_status_label.setText(f"✓ Saved: {camera_name}")
+        self.camera_status_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+
+        # Show warning if session is active
+        if self.session_active:
+            QMessageBox.information(
+                self,
+                "Camera Changed",
+                "Camera selection saved. Please stop and restart your session to apply the new camera."
+            )
+        else:
+            # Update status to show it's ready
+            self.camera_status_label.setText(f"✓ Ready: {camera_name}")
+
+    def _refresh_camera_list(self):
+        """Refresh the list of available cameras."""
+        from ..capture.screen_capture import WebcamCapture
+
+        # Show loading message
+        self.camera_status_label.setText("⏳ Scanning for cameras...")
+        self.camera_status_label.setStyleSheet("color: #f39c12; font-size: 13px;")
+        QApplication.processEvents()  # Update UI immediately
+
+        try:
+            logger.info("Scanning for cameras (this may activate Continuity Camera)...")
+            cameras = WebcamCapture.enumerate_cameras()
+
+            # DEBUG: Log what we got
+            logger.info(f"DEBUG: enumerate_cameras returned {len(cameras)} cameras:")
+            for cam in cameras:
+                logger.info(f"  DEBUG: index={cam['index']}, name={cam['name']}")
+
+            if not cameras:
+                QMessageBox.information(
+                    self,
+                    "No Cameras Found",
+                    "No cameras were detected. Make sure your camera is connected."
+                )
+                return
+
+            # Save current selection
+            current_index = self.config.get_camera_index()
+
+            # Clear and repopulate
+            self.camera_combo.clear()
+            self.camera_combo.addItem("Auto-detect (FaceTime HD)", -1)
+            for cam in cameras:
+                self.camera_combo.addItem(cam["name"], cam["index"])
+
+            # Restore current selection
+            combo_index = self.camera_combo.findData(current_index)
+            if combo_index >= 0:
+                self.camera_combo.setCurrentIndex(combo_index)
+            else:
+                # Default to auto-detect if saved camera not found
+                self.camera_combo.setCurrentIndex(0)
+
+            # Update status
+            self.camera_status_label.setText(f"✓ Found {len(cameras)} camera(s)")
+            self.camera_status_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+
+            logger.info(f"Camera list refreshed: {len(cameras)} cameras found")
+
+            # Show success message with helpful instructions
+            camera_list = "\n".join([f"• {cam['name']}" for cam in cameras])
+            QMessageBox.information(
+                self,
+                "Cameras Detected",
+                f"Found {len(cameras)} camera(s):\n\n{camera_list}\n\n" +
+                "Use 'Show Live Preview' to verify which camera is at each index."
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to refresh camera list: {e}", exc_info=True)
+            self.camera_status_label.setText("❌ Scan failed")
+            self.camera_status_label.setStyleSheet("color: #e74c3c; font-size: 13px;")
+            QMessageBox.warning(
+                self,
+                "Camera Refresh Failed",
+                f"Could not scan for cameras: {str(e)}"
+            )
+
+    def _show_camera_preview(self):
+        """Show live camera preview window."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel
+        from PyQt6.QtCore import QTimer
+        from PyQt6.QtGui import QImage, QPixmap
+        import cv2
+        import numpy as np
+
+        camera_index = self.camera_combo.itemData(self.camera_combo.currentIndex())
+        camera_name = self.camera_combo.currentText()
+
+        # Create preview dialog
+        preview_dialog = QDialog(self)
+        preview_dialog.setWindowTitle(f"Camera Preview - {camera_name}")
+        preview_dialog.setMinimumSize(640, 480)
+
+        layout = QVBoxLayout(preview_dialog)
+
+        # Video label
+        video_label = QLabel()
+        video_label.setStyleSheet("border: 2px solid #bdc3c7;")
+        layout.addWidget(video_label)
+
+        # Status label
+        status_label = QLabel(f"Camera: {camera_name} (Index: {camera_index})")
+        status_label.setStyleSheet("font-size: 12px; color: #7f8c8d;")
+        layout.addWidget(status_label)
+
+        # Try to open camera
+        try:
+            # OpenCV supports -1 as default camera on macOS, so use it directly
+            actual_index = camera_index
+            logger.info(f"Showing camera preview for index {actual_index}")
+
+            cap = cv2.VideoCapture(actual_index)
+
+            if not cap.isOpened():
+                QMessageBox.critical(
+                    self,
+                    "Camera Error",
+                    f"Could not open camera at index {actual_index}"
+                )
+                return
+
+            # Set up timer to update frames
+            def update_frame():
+                ret, frame = cap.read()
+                if ret:
+                    # Convert BGR to RGB
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    h, w, ch = rgb_frame.shape
+                    bytes_per_line = ch * w
+                    qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+
+                    # Scale to fit label
+                    scaled_pixmap = QPixmap.fromImage(qt_image).scaled(
+                        video_label.size(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    video_label.setPixmap(scaled_pixmap)
+
+            timer = QTimer(preview_dialog)
+            timer.timeout.connect(update_frame)
+            timer.start(33)  # ~30 FPS
+
+            # Cleanup on close
+            def cleanup():
+                timer.stop()
+                cap.release()
+                logger.info("Camera preview closed")
+
+            preview_dialog.finished.connect(cleanup)
+
+            logger.info(f"Showing camera preview for index {actual_index}")
+            preview_dialog.exec()
+
+        except Exception as e:
+            logger.error(f"Failed to show camera preview: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Preview Error",
+                f"Failed to open camera preview: {str(e)}"
+            )
     
     def _setup_menu_bar(self):
         """Setup menu bar."""

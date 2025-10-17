@@ -30,6 +30,9 @@ dependencies = [
     "PyYAML>=6.0.0",
     "cryptography>=41.0.0",
     "keyring>=24.0.0",
+
+    # macOS Camera Enumeration
+    "pyobjc-framework-AVFoundation>=10.0; sys_platform == 'darwin'",
     
     # Performance & Monitoring
     "psutil>=5.9.0",

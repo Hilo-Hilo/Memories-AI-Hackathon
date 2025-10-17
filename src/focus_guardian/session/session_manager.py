@@ -159,31 +159,43 @@ class SessionManager:
         openai_key = self.config.get_openai_api_key()
         if not openai_key:
             raise RuntimeError("OpenAI API key not configured")
+
+        vision_model = self.config.get_config_value("openai_vision_model", "gpt-5-nano")
+        vision_detail = self.config.get_config_value("openai_vision_detail", "high")
+
+        self.vision_client = OpenAIVisionClient(
+            api_key=openai_key,
+            model=vision_model,
+            detail=vision_detail
+        )
         
-        self.vision_client = OpenAIVisionClient(api_key=openai_key)
-        
+        # Get camera config (used by both recorder and scheduler)
+        camera_index = self.config.get_camera_index()
+        snapshot_interval = self.config.get_snapshot_interval_sec()
+
         # Video recorders
         self.webcam_recorder = create_recorder(
             kind="cam",
             output_path=Path(self.current_session.cam_mp4_path),
-            quality_profile=quality_profile
+            quality_profile=quality_profile,
+            camera_index=camera_index  # CRITICAL: Use same camera as snapshots
         )
-        
+
         if screen_enabled:
             self.screen_recorder = create_recorder(
                 kind="screen",
                 output_path=Path(self.current_session.screen_mp4_path),
                 quality_profile=quality_profile
             )
-        
+
         # Snapshot scheduler
-        snapshot_interval = self.config.get_snapshot_interval_sec()
         self.snapshot_scheduler = SnapshotScheduler(
             session_id=self.current_session_id,
             interval_sec=snapshot_interval,
             snapshots_dir=snapshots_dir,
             upload_queue=self.queue_manager.snapshot_upload_queue,
-            screen_enabled=screen_enabled
+            screen_enabled=screen_enabled,
+            camera_index=camera_index
         )
         
         # Snapshot uploader worker pool

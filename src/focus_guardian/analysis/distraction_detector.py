@@ -98,8 +98,10 @@ class DistractionDetector:
     
     def _detector_loop(self) -> None:
         """Main detector loop processing events from queue."""
-        logger.debug("Detector loop started")
-        
+        logger.info("🔍 Distraction detector loop started - waiting for events...")
+
+        events_processed = 0
+
         while not self._stop_event.is_set():
             try:
                 # Get event from queue
@@ -107,44 +109,65 @@ class DistractionDetector:
                     message = self.event_queue.get(timeout=1.0)
                 except Empty:
                     continue
-                
+
                 if not message:
                     continue
-                
+
+                events_processed += 1
+                logger.info(f"📨 Received event #{events_processed} from queue")
+
                 # Process message
                 msg_type = message.get("type")
-                
+                logger.debug(f"Event type: {msg_type}")
+
                 if msg_type == "state_transition":
                     transition = message.get("transition")
                     if transition:
+                        logger.info(
+                            f"🔄 Processing state transition: {transition.from_state.value} → "
+                            f"{transition.to_state.value} (confidence: {transition.confidence:.2f})"
+                        )
                         self.process_transition(transition)
-                
+                    else:
+                        logger.warning("State transition message missing 'transition' field")
+                else:
+                    logger.warning(f"Unknown event type: {msg_type}")
+
                 # Mark task done
                 self.event_queue.task_done()
-            
+
             except Exception as e:
                 logger.error(f"Detector loop error: {e}", exc_info=True)
-        
-        logger.debug("Detector loop stopped")
+
+        logger.info(f"🔍 Detector loop stopped (processed {events_processed} events total)")
     
     def process_transition(self, transition: StateTransition) -> None:
         """
         Process state transition and apply business rules.
-        
+
         Args:
             transition: StateTransition from fusion engine
         """
         from_state = transition.from_state
         to_state = transition.to_state
-        
+
+        logger.info(
+            f"📊 Transition analysis: {from_state.value} → {to_state.value}"
+        )
+
         # Handle transition TO distracted/absent state
         if to_state in [State.DISTRACTED, State.ABSENT]:
+            logger.info(f"⚠️  Distraction/Absence detected: {to_state.value}")
             self._start_distraction(to_state, transition)
-        
+
         # Handle transition FROM distracted/absent TO focused
         elif from_state in [State.DISTRACTED, State.ABSENT] and to_state == State.FOCUSED:
+            logger.info(f"✅ Returning to focus from: {from_state.value}")
             self._end_distraction(transition)
-        
+
+        else:
+            logger.debug(f"No action needed for transition: {from_state.value} → {to_state.value}")
+
         # Check for micro-break suggestion
         self._check_micro_break_needed()
     
@@ -152,17 +175,24 @@ class DistractionDetector:
         """Start tracking a distraction episode and emit immediate alert."""
         if self._current_distraction_start is not None:
             # Already tracking a distraction
-            logger.debug("Already tracking distraction, updating evidence")
+            logger.info(
+                f"⚠️  Already tracking distraction (started {self._current_distraction_start}), "
+                f"updating evidence"
+            )
             self._current_distraction_evidence = transition.evidence
             return
-        
+
         self._current_distraction_start = transition.timestamp
         self._current_distraction_state = state
         self._current_distraction_evidence = transition.evidence
-        
-        logger.info(f"Started tracking distraction: {state.value}")
-        
+
+        logger.info(
+            f"🚨 DISTRACTION STARTED: {state.value} at {transition.timestamp.strftime('%H:%M:%S')}"
+        )
+        logger.info(f"Evidence: {transition.evidence}")
+
         # Emit IMMEDIATE alert when distraction detected (don't wait for it to end)
+        logger.info("📢 Emitting immediate alert to UI...")
         self._emit_immediate_alert(
             state=state,
             started_at=transition.timestamp,
@@ -173,15 +203,23 @@ class DistractionDetector:
     def _end_distraction(self, transition: StateTransition) -> None:
         """End distraction tracking and emit event if threshold met."""
         if self._current_distraction_start is None:
-            logger.debug("No distraction to end")
+            logger.info("No active distraction to end")
             return
-        
+
         # Calculate duration
         duration = (transition.timestamp - self._current_distraction_start).total_seconds()
         duration_minutes = duration / 60.0
-        
+
+        logger.info(
+            f"✅ DISTRACTION ENDED: Duration {duration_minutes:.2f} min "
+            f"(threshold: {self.alert_threshold_minutes:.2f} min)"
+        )
+
         # Only emit event if duration exceeds threshold
         if duration_minutes >= self.alert_threshold_minutes:
+            logger.info(
+                f"💾 Duration exceeds threshold - writing distraction event to database"
+            )
             self._emit_distraction_event(
                 started_at=self._current_distraction_start,
                 ended_at=transition.timestamp,
@@ -190,9 +228,9 @@ class DistractionDetector:
                 confidence=transition.confidence
             )
         else:
-            logger.debug(
-                f"Distraction too brief ({duration_minutes:.2f} min), "
-                f"not emitting event"
+            logger.info(
+                f"⏭️  Distraction too brief ({duration_minutes:.2f} min < "
+                f"{self.alert_threshold_minutes:.2f} min) - NOT writing to database"
             )
         
         # Reset tracking
@@ -229,8 +267,9 @@ class DistractionDetector:
         evidence_str = self._build_evidence_string(evidence)
         
         # Create distraction event
+        event_id = str(uuid.uuid4())
         event = DistractionEvent(
-            event_id=str(uuid.uuid4()),
+            event_id=event_id,
             session_id=self.session_id,
             started_at=started_at,
             ended_at=ended_at,
@@ -242,16 +281,24 @@ class DistractionDetector:
             snapshot_refs=[],  # Will be populated if needed
             acknowledged=False
         )
-        
+
+        logger.info(
+            f"💾 Creating distraction event in database:\n"
+            f"   Event ID: {event_id}\n"
+            f"   Type: {distraction_type.value}\n"
+            f"   Duration: {duration_seconds:.1f}s ({duration_seconds/60:.2f} min)\n"
+            f"   Started: {started_at.strftime('%H:%M:%S')}\n"
+            f"   Ended: {ended_at.strftime('%H:%M:%S')}\n"
+            f"   Confidence: {confidence:.2f}\n"
+            f"   Vision votes: {vision_votes}"
+        )
+
         # Save to database
         try:
             self.database.insert_distraction_event(event)
-            logger.info(
-                f"Distraction event created: {distraction_type.value} "
-                f"({duration_seconds:.1f}s, confidence: {confidence:.2f})"
-            )
+            logger.info(f"✅ Successfully saved distraction event {event_id} to database")
         except Exception as e:
-            logger.error(f"Failed to save distraction event: {e}")
+            logger.error(f"❌ FAILED to save distraction event {event_id}: {e}", exc_info=True)
         
         # Send UI notification
         self._send_ui_notification(event)

@@ -48,23 +48,36 @@ class VisionAPIError(Exception):
 class OpenAIVisionClient:
     """OpenAI Vision API client for snapshot classification."""
     
-    def __init__(self, api_key: str, timeout_sec: int = 30, model: str = "gpt-4o-mini"):
+    def __init__(
+        self,
+        api_key: str,
+        timeout_sec: int = 30,
+        model: str = "gpt-5-nano",
+        detail: str = "high"
+    ):
         """
         Initialize OpenAI Vision client.
-        
+
         Args:
             api_key: OpenAI API key
             timeout_sec: Request timeout in seconds
-            model: Model to use (gpt-4o-mini recommended for cost/speed balance)
+            model: Model to use (gpt-5-nano recommended for best cost efficiency)
+                   Options: gpt-5-nano ($0.055/image), gpt-4o-mini ($0.165/image)
+            detail: Image detail level - "low" (85 tokens) or "high" (1100 tokens)
+                   gpt-5-nano pricing: low=$0.00425/image, high=$0.055/image
+                   High detail recommended for better accuracy with 120s intervals.
         """
         self.api_key = api_key
         self.timeout_sec = timeout_sec
         self.model = model
-        
+        self.detail = detail
+
         # Initialize OpenAI client
         self.client = OpenAI(api_key=api_key, timeout=timeout_sec)
-        
-        logger.info(f"OpenAI Vision client initialized (model: {model})")
+
+        logger.info(
+            f"OpenAI Vision client initialized (model: {model}, detail: {detail})"
+        )
     
     def classify_cam_snapshot(self, image_path: Path) -> VisionResult:
         """
@@ -214,7 +227,7 @@ Return as JSON:
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{base64_image}",
-                                    "detail": "low"  # Use low detail for cost efficiency
+                                    "detail": self.detail  # Configurable: low (cheap) or high (accurate)
                                 }
                             }
                         ]

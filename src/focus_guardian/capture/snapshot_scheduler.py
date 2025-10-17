@@ -49,11 +49,12 @@ class SnapshotScheduler:
         snapshots_dir: Path,
         upload_queue: Queue,
         screen_enabled: bool = True,
-        jpeg_quality: int = 85
+        jpeg_quality: int = 85,
+        camera_index: int = -1
     ):
         """
         Initialize snapshot scheduler.
-        
+
         Args:
             session_id: Current session ID
             interval_sec: Snapshot interval in seconds (default 60)
@@ -61,6 +62,7 @@ class SnapshotScheduler:
             upload_queue: Queue to send snapshot pairs for upload
             screen_enabled: Whether to capture screen snapshots
             jpeg_quality: JPEG compression quality (0-100)
+            camera_index: Camera index (-1 = auto-detect, 0+ = specific camera)
         """
         self.session_id = session_id
         self.interval_sec = interval_sec
@@ -68,14 +70,18 @@ class SnapshotScheduler:
         self.upload_queue = upload_queue
         self.screen_enabled = screen_enabled
         self.jpeg_quality = jpeg_quality
-        
+
         # Ensure snapshot directory exists
         self.snapshots_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize capture devices
         try:
-            self.webcam = WebcamCapture(camera_index=0, jpeg_quality=jpeg_quality)
-            logger.info("Webcam capture initialized")
+            self.webcam = WebcamCapture(
+                camera_index=camera_index,
+                jpeg_quality=jpeg_quality,
+                prefer_builtin=(camera_index == -1)  # Auto-detect if -1
+            )
+            logger.info(f"Webcam capture initialized (camera_index={camera_index})")
         except Exception as e:
             logger.error(f"Failed to initialize webcam: {e}")
             raise
@@ -93,7 +99,7 @@ class SnapshotScheduler:
         # State
         self._running = False
         self._paused = False
-        self._timer: Optional[threading.Timer] = None
+        self._thread: Optional[threading.Thread] = None
         self._total_captured = 0
         self._last_capture_time: Optional[datetime] = None
         self._next_capture_time: Optional[datetime] = None
@@ -108,69 +114,84 @@ class SnapshotScheduler:
         if self._running:
             logger.warning("Scheduler already running")
             return
-        
+
         self._running = True
         self._paused = False
-        self._schedule_next_capture()
-        
+
+        # Start single persistent thread instead of creating new timers
+        self._thread = threading.Thread(
+            target=self._scheduler_loop,
+            name="snapshot-scheduler",
+            daemon=True
+        )
+        self._thread.start()
+
         logger.info("Snapshot scheduler started")
-    
+
     def stop(self) -> None:
         """Stop scheduler and wait for completion."""
         if not self._running:
             return
-        
+
         logger.info("Stopping snapshot scheduler...")
         self._running = False
-        
-        # Cancel pending timer
-        if self._timer:
-            self._timer.cancel()
-            self._timer = None
-        
+
+        # Wait for thread to finish
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=5.0)
+
         # Cleanup capture devices
         if self.webcam:
             self.webcam.close()
         if self.screen_capture:
             self.screen_capture.close()
-        
+
         logger.info(f"Snapshot scheduler stopped (total captured: {self._total_captured})")
-    
+
     def pause(self) -> None:
         """Pause snapshot capture."""
         if not self._running or self._paused:
             return
-        
+
         self._paused = True
-        
-        # Cancel pending timer
-        if self._timer:
-            self._timer.cancel()
-            self._timer = None
-        
         logger.info("Snapshot scheduler paused")
-    
+
     def resume(self) -> None:
         """Resume snapshot capture."""
         if not self._running or not self._paused:
             return
-        
+
         self._paused = False
-        self._schedule_next_capture()
-        
         logger.info("Snapshot scheduler resumed")
-    
-    def _schedule_next_capture(self) -> None:
-        """Schedule next snapshot capture."""
-        if not self._running or self._paused:
-            return
-        
-        self._timer = threading.Timer(self.interval_sec, self._capture_snapshots)
-        self._timer.daemon = True
-        self._timer.start()
-        
+
+    def _scheduler_loop(self) -> None:
+        """Main scheduler loop running in persistent thread."""
+        import time
         from datetime import timedelta
-        self._next_capture_time = datetime.now() + timedelta(seconds=self.interval_sec)
+
+        logger.debug("Scheduler loop started")
+
+        while self._running:
+            try:
+                # Wait for interval (check _running every 0.5s to allow quick shutdown)
+                elapsed = 0.0
+                while elapsed < self.interval_sec and self._running:
+                    time.sleep(0.5)
+                    elapsed += 0.5
+
+                # Skip capture if paused or stopped
+                if not self._running or self._paused:
+                    continue
+
+                # Capture snapshots
+                self._next_capture_time = datetime.now()
+                self._capture_snapshots()
+
+            except Exception as e:
+                logger.error(f"Scheduler loop error: {e}", exc_info=True)
+                # Continue running even on error
+
+        logger.debug("Scheduler loop stopped")
     
     def _capture_snapshots(self) -> None:
         """Capture camera and screen snapshots."""
@@ -188,8 +209,7 @@ class SnapshotScheduler:
             
             if not cam_success:
                 logger.error("Failed to capture camera snapshot")
-                self._schedule_next_capture()  # Continue even if capture fails
-                return
+                return  # Continue in next loop iteration
             
             cam_snapshot = Snapshot(
                 snapshot_id=cam_snapshot_id,
@@ -243,10 +263,6 @@ class SnapshotScheduler:
         
         except Exception as e:
             logger.error(f"Error capturing snapshots: {e}", exc_info=True)
-        
-        finally:
-            # Schedule next capture
-            self._schedule_next_capture()
     
     def get_stats(self) -> SchedulerStats:
         """Get scheduler statistics."""

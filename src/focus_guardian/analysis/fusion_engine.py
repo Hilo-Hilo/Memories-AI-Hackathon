@@ -143,14 +143,15 @@ class FusionEngine:
             
             # Update state machine
             transition = self.state_machine.update(snapshot_result)
-            
+
             # If state transition occurred, emit event
             if transition:
                 logger.info(
-                    f"State transition: {transition.from_state.value} → "
+                    f"🔄 STATE TRANSITION DETECTED: {transition.from_state.value} → "
                     f"{transition.to_state.value} (confidence: {transition.confidence:.2f})"
                 )
-                
+                logger.info(f"Transition evidence: {transition.evidence}")
+
                 # Send transition to event queue for distraction detector
                 try:
                     self.event_queue.put({
@@ -159,8 +160,13 @@ class FusionEngine:
                         "snapshot_id": snapshot_id,
                         "timestamp": timestamp
                     }, block=False)
+                    logger.info(f"📤 Sent transition to distraction detector queue")
                 except Exception as e:
-                    logger.error(f"Failed to queue state transition: {e}")
+                    logger.error(f"❌ Failed to queue state transition: {e}", exc_info=True)
+            else:
+                logger.debug(
+                    f"No state transition (current: {self.state_machine._current_state.value})"
+                )
         
         except Exception as e:
             logger.error(f"Error processing snapshot result: {e}", exc_info=True)

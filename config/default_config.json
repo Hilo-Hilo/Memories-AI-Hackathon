@@ -1,18 +1,22 @@
 {
-  "snapshot_interval_sec": 5,
+  "snapshot_interval_sec": 120,
   "video_bitrate_kbps_cam": 500,
   "video_bitrate_kbps_screen": 1000,
   "video_res_profile": "Std",
   "max_parallel_uploads": 3,
   "openai_vision_enabled": true,
+  "openai_vision_model": "gpt-5-nano",
+  "openai_vision_detail": "high",
   "K_hysteresis": 3,
-  "min_span_minutes": 0.15,
+  "min_span_minutes": 3.5,
   "alert_sound_enabled": true,
   "data_retention_days": 30,
   "upload_timeout_sec": 30,
   "retry_max_attempts": 3,
   "retry_backoff_factor": 2.0,
   "queue_max_size": 100,
-  "session_auto_save_interval_sec": 60
+  "session_auto_save_interval_sec": 60,
+  "camera_index": -1,
+  "camera_name": "Auto-detect (FaceTime HD)"
 }
 

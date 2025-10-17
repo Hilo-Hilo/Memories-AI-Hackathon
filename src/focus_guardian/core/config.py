@@ -224,7 +224,40 @@ class Config:
     def get_min_span_minutes(self) -> float:
         """Get minimum span in minutes for debounce (default: 1.0)."""
         return float(self._get_config_value("min_span_minutes", 1.0))
-    
+
+    def get_camera_index(self) -> int:
+        """
+        Get camera index for webcam capture.
+
+        Returns:
+            -1 for auto-detect (prefers built-in), 0+ for specific camera
+        """
+        return int(self._get_config_value("camera_index", -1))
+
+    def get_camera_name(self) -> str:
+        """Get human-readable camera name."""
+        return str(self._get_config_value("camera_name", "Auto-detect (FaceTime HD)"))
+
+    def set_camera_config(self, camera_index: int, camera_name: str) -> None:
+        """
+        Save camera selection to user config.
+
+        Args:
+            camera_index: Camera index (-1 for auto, 0+ for specific)
+            camera_name: Human-readable camera name
+        """
+        self._user_config["camera_index"] = camera_index
+        self._user_config["camera_name"] = camera_name
+
+        # Save to config file
+        user_config_path = self.data_dir / "config.encrypted.json"
+        try:
+            with open(user_config_path, 'w') as f:
+                json.dump(self._user_config, f, indent=2)
+            logger.info(f"Camera config saved: {camera_name} (index {camera_index})")
+        except Exception as e:
+            logger.error(f"Failed to save camera config: {e}")
+
     # ========================================================================
     # Public API - API Keys
     # ========================================================================
