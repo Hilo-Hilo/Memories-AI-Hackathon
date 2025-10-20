@@ -81,7 +81,115 @@ class MainWindow(QMainWindow):
         self._ui_queue_timer.timeout.connect(self._process_ui_queue)
         self._ui_queue_timer.start(100)  # Process every 100ms
         
+        # Task history for quick selection
+        self.task_history = self._load_task_history()
+        
         logger.info("Main window initialized")
+    
+    def _load_task_history(self) -> list:
+        """Load task history from database."""
+        try:
+            # Get last 10 unique task names from recent sessions
+            sessions = self.database.get_all_sessions(limit=50)
+            task_names = []
+            seen = set()
+            
+            for session in sessions:
+                if session.task_name and session.task_name not in seen:
+                    task_names.append(session.task_name)
+                    seen.add(session.task_name)
+                    if len(task_names) >= 10:
+                        break
+            
+            return task_names
+        except Exception as e:
+            logger.error(f"Failed to load task history: {e}")
+            return []
+    
+    def _save_task_to_history(self, task_name: str) -> None:
+        """Save task to history (updates on session start)."""
+        if task_name and task_name not in self.task_history:
+            self.task_history.insert(0, task_name)
+            self.task_history = self.task_history[:10]  # Keep only last 10
+    
+    def _show_task_input_dialog(self) -> str:
+        """Show task input dialog with history dropdown."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QComboBox, QLineEdit, QDialogButtonBox, QLabel
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Start Focus Session")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Instructions
+        instruction_label = QLabel("What task are you working on?")
+        instruction_label.setStyleSheet("font-size: 14px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(instruction_label)
+        
+        # Combo box with editable text (history + custom input)
+        task_input = QComboBox()
+        task_input.setEditable(True)
+        task_input.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        task_input.setPlaceholderText("Enter task name or select from history...")
+        
+        # Add history items
+        if self.task_history:
+            task_input.addItems(self.task_history)
+        else:
+            # Default suggestions if no history
+            task_input.addItems([
+                "Focus Work",
+                "Coding Session",
+                "Writing Session",
+                "Study Session",
+                "Design Work",
+                "Research"
+            ])
+        
+        task_input.setCurrentText("")  # Start with empty input
+        task_input.setStyleSheet("""
+            QComboBox {
+                font-size: 14px;
+                padding: 8px;
+                border: 2px solid #3498db;
+                border-radius: 4px;
+            }
+        """)
+        layout.addWidget(task_input)
+        
+        # Hint label
+        hint_label = QLabel("Tip: Press Enter to start quickly")
+        hint_label.setStyleSheet("font-size: 11px; color: #7f8c8d; font-style: italic; margin-top: 5px;")
+        layout.addWidget(hint_label)
+        
+        # Buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Focus the input field
+        task_input.setFocus()
+        
+        # Allow Enter key to submit
+        def on_return_pressed():
+            if task_input.currentText().strip():
+                dialog.accept()
+        
+        task_input.lineEdit().returnPressed.connect(on_return_pressed)
+        
+        # Show dialog
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            task_name = task_input.currentText().strip()
+            if task_name:
+                # Save to history
+                self._save_task_to_history(task_name)
+                return task_name
+        
+        return None  # User cancelled
     
     def _setup_ui(self):
         """Setup main UI layout."""
@@ -134,10 +242,27 @@ class MainWindow(QMainWindow):
             }
         """)
         
+        # Enhanced session status with colored indicator
+        status_container = QWidget()
+        status_layout = QHBoxLayout(status_container)
+        status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_layout.setSpacing(10)
+        
+        self.session_status_icon = QLabel("⚫")
+        self.session_status_icon.setStyleSheet("font-size: 24px;")
+        status_layout.addWidget(self.session_status_icon)
+        
         self.session_status_label = QLabel("No active session")
         self.session_status_label.setStyleSheet("font-size: 18px; color: #7f8c8d;")
-        self.session_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        info_layout.addWidget(self.session_status_label)
+        status_layout.addWidget(self.session_status_label)
+        
+        # Recording indicators (hidden by default)
+        self.recording_indicators = QLabel("📷 🖥️")
+        self.recording_indicators.setStyleSheet("font-size: 16px; margin-left: 10px;")
+        self.recording_indicators.setVisible(False)
+        status_layout.addWidget(self.recording_indicators)
+        
+        info_layout.addWidget(status_container)
         
         self.session_timer_label = QLabel("00:00:00")
         self.session_timer_label.setStyleSheet("font-size: 48px; font-weight: bold; color: #3498db;")
@@ -219,25 +344,64 @@ class MainWindow(QMainWindow):
         
         layout.addLayout(button_layout)
         
-        # Stats display
+        # Enhanced stats display with visual indicators
         stats_label = QLabel("Session Statistics")
         stats_label.setStyleSheet("font-size: 18px; font-weight: bold; margin-top: 20px;")
         layout.addWidget(stats_label)
         
         stats_widget = QWidget()
-        stats_layout = QHBoxLayout(stats_widget)
+        stats_widget.setStyleSheet("""
+            QWidget {
+                background-color: #ffffff;
+                border: 1px solid #bdc3c7;
+                border-radius: 8px;
+                padding: 15px;
+            }
+        """)
+        stats_layout = QVBoxLayout(stats_widget)
         
-        self.snapshots_label = QLabel("Snapshots: 0")
-        self.snapshots_label.setStyleSheet("font-size: 14px;")
-        stats_layout.addWidget(self.snapshots_label)
+        # First row: Counters
+        counters_layout = QHBoxLayout()
         
-        self.distractions_label = QLabel("Distractions: 0")
-        self.distractions_label.setStyleSheet("font-size: 14px;")
-        stats_layout.addWidget(self.distractions_label)
+        self.snapshots_label = QLabel("📸 Snapshots: 0")
+        self.snapshots_label.setStyleSheet("font-size: 14px; color: #3498db; font-weight: bold;")
+        counters_layout.addWidget(self.snapshots_label)
         
-        self.focus_ratio_label = QLabel("Focus: 0%")
-        self.focus_ratio_label.setStyleSheet("font-size: 14px;")
-        stats_layout.addWidget(self.focus_ratio_label)
+        self.distractions_label = QLabel("⚠️ Distractions: 0")
+        self.distractions_label.setStyleSheet("font-size: 14px; color: #e74c3c; font-weight: bold;")
+        counters_layout.addWidget(self.distractions_label)
+        
+        self.focus_ratio_label = QLabel("✓ Focus: 100%")
+        self.focus_ratio_label.setStyleSheet("font-size: 14px; color: #27ae60; font-weight: bold;")
+        counters_layout.addWidget(self.focus_ratio_label)
+        
+        stats_layout.addLayout(counters_layout)
+        
+        # Second row: Progress bar for focus ratio
+        from PyQt6.QtWidgets import QProgressBar
+        self.focus_progress_bar = QProgressBar()
+        self.focus_progress_bar.setRange(0, 100)
+        self.focus_progress_bar.setValue(100)
+        self.focus_progress_bar.setTextVisible(False)
+        self.focus_progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #bdc3c7;
+                border-radius: 4px;
+                height: 20px;
+                background-color: #ecf0f1;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                                   stop:0 #27ae60, stop:1 #2ecc71);
+                border-radius: 3px;
+            }
+        """)
+        stats_layout.addWidget(self.focus_progress_bar)
+        
+        # Third row: Cost estimate
+        self.cost_label = QLabel("💰 Estimated cost: $0.00")
+        self.cost_label.setStyleSheet("font-size: 12px; color: #95a5a6; margin-top: 5px;")
+        stats_layout.addWidget(self.cost_label)
         
         layout.addWidget(stats_widget)
         
@@ -260,7 +424,7 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(label)
 
         # Refresh all button
-        self.refresh_all_btn = QPushButton("Refresh All")
+        self.refresh_all_btn = QPushButton("🔄 Refresh All")
         self.refresh_all_btn.setStyleSheet("""
             QPushButton {
                 background-color: #3498db;
@@ -274,11 +438,80 @@ class MainWindow(QMainWindow):
                 background-color: #2980b9;
             }
         """)
+        self.refresh_all_btn.setToolTip("Refresh status of all processing cloud jobs")
         self.refresh_all_btn.clicked.connect(self._on_refresh_all_sessions)
         header_layout.addWidget(self.refresh_all_btn)
+        
+        # Batch Upload All button
+        self.batch_upload_btn = QPushButton("☁️ Upload All Completed")
+        self.batch_upload_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9b59b6;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #8e44ad;
+            }
+        """)
+        self.batch_upload_btn.setToolTip("Upload all completed sessions that haven't been uploaded yet")
+        self.batch_upload_btn.clicked.connect(self._on_batch_upload_sessions)
+        header_layout.addWidget(self.batch_upload_btn)
+        
         header_layout.addStretch()
 
         layout.addLayout(header_layout)
+        
+        # Search and filter bar
+        filter_layout = QHBoxLayout()
+        
+        # Search box
+        from PyQt6.QtWidgets import QLineEdit
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("🔍 Search sessions by task name...")
+        self.search_box.setStyleSheet("""
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #bdc3c7;
+                border-radius: 4px;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+            }
+        """)
+        self.search_box.textChanged.connect(self._on_search_changed)
+        filter_layout.addWidget(self.search_box)
+        
+        # Filter dropdown
+        from PyQt6.QtWidgets import QComboBox
+        self.filter_combo = QComboBox()
+        self.filter_combo.addItems([
+            "All Sessions",
+            "Today",
+            "This Week",
+            "This Month",
+            "With Cloud Analysis",
+            "Without Cloud Analysis",
+            "Upload Failed"
+        ])
+        self.filter_combo.setStyleSheet("""
+            QComboBox {
+                padding: 8px;
+                border: 1px solid #bdc3c7;
+                border-radius: 4px;
+                font-size: 13px;
+                min-width: 150px;
+            }
+        """)
+        self.filter_combo.currentTextChanged.connect(self._on_filter_changed)
+        filter_layout.addWidget(self.filter_combo)
+        
+        layout.addLayout(filter_layout)
 
         # Scroll area for sessions list
         scroll_area = QScrollArea()
@@ -844,13 +1077,21 @@ class MainWindow(QMainWindow):
     def _on_start_session(self):
         """Handle start session button click."""
         from datetime import datetime
+        from PyQt6.QtWidgets import QInputDialog, QComboBox, QDialog, QLineEdit
         
         logger.info("Start session requested")
         
-        # TODO: Show task input dialog
-        task_name = "Focus Work"  # Placeholder
+        # Show task input dialog with history
+        task_name = self._show_task_input_dialog()
+        if not task_name:  # User cancelled
+            return
         
-        self.session_status_label.setText(f"Session Active")
+        # Update status with enhanced visual indicators
+        self.session_status_icon.setText("🟢")  # Green active indicator
+        self.session_status_label.setText("Session Active")
+        self.session_status_label.setStyleSheet("font-size: 18px; color: #27ae60; font-weight: bold;")
+        self.recording_indicators.setVisible(True)  # Show recording icons
+        
         self.task_label.setText(f"Task: {task_name}")
         
         self.start_button.setEnabled(False)
@@ -865,7 +1106,7 @@ class MainWindow(QMainWindow):
         self.session_timer.start(1000)  # Update every second
         self.stats_timer.start(5000)     # Update every 5 seconds
         
-        self.status_bar.showMessage("Focus session started")
+        self.status_bar.showMessage("🟢 Focus session started - recording active")
         
         # Start actual session
         try:
@@ -900,7 +1141,13 @@ class MainWindow(QMainWindow):
             self.pause_button.setText("Resume")
             self.session_paused_at = datetime.now()
             self.session_timer.stop()
-            self.status_bar.showMessage("Session paused")
+            
+            # Update status indicators for paused state
+            self.session_status_icon.setText("🟡")  # Yellow paused indicator
+            self.session_status_label.setText("Session Paused")
+            self.session_status_label.setStyleSheet("font-size: 18px; color: #f39c12; font-weight: bold;")
+            
+            self.status_bar.showMessage("🟡 Session paused")
             
             # Pause session manager
             try:
@@ -915,7 +1162,13 @@ class MainWindow(QMainWindow):
                 self.session_total_paused_seconds += pause_duration
                 self.session_paused_at = None
             self.session_timer.start(1000)
-            self.status_bar.showMessage("Session resumed")
+            
+            # Update status indicators back to active
+            self.session_status_icon.setText("🟢")  # Green active indicator
+            self.session_status_label.setText("Session Active")
+            self.session_status_label.setStyleSheet("font-size: 18px; color: #27ae60; font-weight: bold;")
+            
+            self.status_bar.showMessage("🟢 Session resumed")
             
             # Resume session manager
             try:
@@ -938,7 +1191,12 @@ class MainWindow(QMainWindow):
             self.session_timer.stop()
             self.stats_timer.stop()
 
+            # Reset status indicators
+            self.session_status_icon.setText("⚫")  # Gray idle indicator
             self.session_status_label.setText("No active session")
+            self.session_status_label.setStyleSheet("font-size: 18px; color: #7f8c8d;")
+            self.recording_indicators.setVisible(False)  # Hide recording icons
+            
             self.session_timer_label.setText("00:00:00")
             self.task_label.setText("Task: None")
 
@@ -995,16 +1253,51 @@ class MainWindow(QMainWindow):
         self.session_timer_label.setText(time_str)
     
     def _update_stats(self):
-        """Update session statistics display."""
+        """Update session statistics display with enhanced visualizations."""
         if not self.session_active:
             return
         
         try:
             stats = self.session_manager.get_session_stats()
             
-            self.snapshots_label.setText(f"Snapshots: {stats['total_snapshots']}")
-            self.distractions_label.setText(f"Distractions: {stats['total_events']}")
-            self.focus_ratio_label.setText(f"Focus: {stats['focus_ratio']*100:.0f}%")
+            # Update counters with icons and colors
+            snapshots = stats['total_snapshots']
+            distractions = stats['total_events']
+            focus_ratio = stats['focus_ratio'] * 100
+            
+            self.snapshots_label.setText(f"📸 Snapshots: {snapshots}")
+            self.distractions_label.setText(f"⚠️ Distractions: {distractions}")
+            self.focus_ratio_label.setText(f"✓ Focus: {focus_ratio:.0f}%")
+            
+            # Update progress bar with color coding
+            self.focus_progress_bar.setValue(int(focus_ratio))
+            
+            # Change progress bar color based on focus ratio
+            if focus_ratio >= 80:
+                color = "#27ae60"  # Green - excellent
+            elif focus_ratio >= 60:
+                color = "#f39c12"  # Orange - good
+            else:
+                color = "#e74c3c"  # Red - needs improvement
+            
+            self.focus_progress_bar.setStyleSheet(f"""
+                QProgressBar {{
+                    border: 1px solid #bdc3c7;
+                    border-radius: 4px;
+                    height: 20px;
+                    background-color: #ecf0f1;
+                }}
+                QProgressBar::chunk {{
+                    background-color: {color};
+                    border-radius: 3px;
+                }}
+            """)
+            
+            # Calculate estimated cost based on snapshots
+            # Cost: ~$0.01 per snapshot (cam + screen) with gpt-5-nano high detail
+            estimated_cost = snapshots * 2 * 0.055  # 2 images per snapshot, $0.055 each
+            self.cost_label.setText(f"💰 Estimated cost: ${estimated_cost:.2f}")
+            
         except Exception as e:
             logger.error(f"Failed to update stats: {e}")
     
@@ -2148,8 +2441,9 @@ class MainWindow(QMainWindow):
             )
 
     def _load_sessions_list(self):
-        """Load all sessions from database and display in Reports tab."""
+        """Load all sessions from database and display in Reports tab with filtering."""
         from ..core.models import CloudJobStatus
+        from datetime import datetime, timedelta
 
         # Clear existing session cards
         while self.sessions_layout.count():
@@ -2158,23 +2452,187 @@ class MainWindow(QMainWindow):
                 item.widget().deleteLater()
 
         # Get all sessions from database (most recent first)
-        sessions = self.database.get_all_sessions(limit=50)
+        all_sessions = self.database.get_all_sessions(limit=50)
 
-        if not sessions:
+        if not all_sessions:
             placeholder = QLabel("No sessions found. Complete a focus session to see reports here.")
             placeholder.setStyleSheet("color: #7f8c8d; font-size: 14px; padding: 20px;")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.sessions_layout.addWidget(placeholder)
             return
 
+        # Apply search filter
+        search_text = self.search_box.text().strip().lower()
+        if search_text:
+            all_sessions = [s for s in all_sessions if search_text in s.task_name.lower()]
+
+        # Apply date/status filter
+        filter_type = self.filter_combo.currentText()
+        filtered_sessions = self._apply_session_filter(all_sessions, filter_type)
+
+        if not filtered_sessions:
+            placeholder = QLabel(f"No sessions match the current filters.\n\nTry adjusting your search or filter settings.")
+            placeholder.setStyleSheet("color: #7f8c8d; font-size: 14px; padding: 20px;")
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setWordWrap(True)
+            self.sessions_layout.addWidget(placeholder)
+            return
+
         # Create card for each session
-        for session in sessions:
+        for session in filtered_sessions:
             # Get cloud jobs for this session
             cloud_jobs = self.database.get_cloud_jobs_for_session(session.session_id)
 
             # Create session card
             card = self._create_session_card(session, cloud_jobs)
             self.sessions_layout.addWidget(card)
+    
+    def _apply_session_filter(self, sessions: list, filter_type: str) -> list:
+        """Apply date/status filter to sessions list."""
+        from datetime import datetime, timedelta
+        
+        if filter_type == "All Sessions":
+            return sessions
+        
+        elif filter_type == "Today":
+            today = datetime.now().date()
+            return [s for s in sessions if s.started_at.date() == today]
+        
+        elif filter_type == "This Week":
+            week_ago = datetime.now() - timedelta(days=7)
+            return [s for s in sessions if s.started_at >= week_ago]
+        
+        elif filter_type == "This Month":
+            month_ago = datetime.now() - timedelta(days=30)
+            return [s for s in sessions if s.started_at >= month_ago]
+        
+        elif filter_type == "With Cloud Analysis":
+            return [s for s in sessions if self.database.get_cloud_jobs_for_session(s.session_id)]
+        
+        elif filter_type == "Without Cloud Analysis":
+            return [s for s in sessions if not self.database.get_cloud_jobs_for_session(s.session_id)]
+        
+        elif filter_type == "Upload Failed":
+            from ..core.models import CloudJobStatus
+            failed_sessions = []
+            for s in sessions:
+                cloud_jobs = self.database.get_cloud_jobs_for_session(s.session_id)
+                if any(job.status == CloudJobStatus.FAILED for job in cloud_jobs):
+                    failed_sessions.append(s)
+            return failed_sessions
+        
+        return sessions
+    
+    def _on_search_changed(self, text: str):
+        """Handle search text change."""
+        # Reload sessions with search filter applied
+        self._load_sessions_list()
+    
+    def _on_filter_changed(self, filter_text: str):
+        """Handle filter change."""
+        # Reload sessions with filter applied
+        self._load_sessions_list()
+    
+    def _on_batch_upload_sessions(self):
+        """Upload all completed sessions without cloud analysis."""
+        from PyQt6.QtWidgets import QProgressDialog
+        from ..core.models import CloudJobStatus
+        import threading
+        
+        # Find sessions that can be uploaded
+        all_sessions = self.database.get_all_sessions(limit=50)
+        uploadable_sessions = []
+        
+        for session in all_sessions:
+            # Only include completed sessions
+            if not session.ended_at:
+                continue
+            
+            # Check if already has cloud jobs
+            cloud_jobs = self.database.get_cloud_jobs_for_session(session.session_id)
+            if not cloud_jobs:
+                uploadable_sessions.append(session)
+        
+        if not uploadable_sessions:
+            QMessageBox.information(
+                self,
+                "No Sessions to Upload",
+                "All completed sessions have already been uploaded for cloud analysis."
+            )
+            return
+        
+        # Show confirmation
+        cost_per_session = 0.15  # Rough estimate
+        total_cost = len(uploadable_sessions) * cost_per_session
+        
+        reply = QMessageBox.question(
+            self,
+            "Batch Upload Sessions",
+            f"Upload {len(uploadable_sessions)} session(s) to cloud for analysis?\n\n"
+            f"Estimated total cost: ${total_cost:.2f}\n"
+            f"Processing time: 5-10 minutes per session\n\n"
+            "This will upload to all enabled providers (Hume AI and/or Memories.ai).",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Show progress dialog
+        progress = QProgressDialog(
+            "Uploading sessions...",
+            "Cancel",
+            0,
+            len(uploadable_sessions),
+            self
+        )
+        progress.setWindowTitle("Batch Upload In Progress")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setCancelButton(None)  # No cancel for simplicity
+        progress.show()
+        
+        # Upload in background
+        def batch_upload_worker():
+            for i, session in enumerate(uploadable_sessions):
+                if progress.wasCanceled():
+                    break
+                
+                # Update progress
+                def update_progress(index=i, task=session.task_name):
+                    progress.setValue(index)
+                    progress.setLabelText(f"Uploading session {index + 1} of {len(uploadable_sessions)}:\n{task}")
+                
+                QTimer.singleShot(0, update_progress)
+                
+                # Upload session
+                try:
+                    self.session_manager.cloud_analysis_manager.upload_session_for_analysis(
+                        session_id=session.session_id,
+                        cam_video_path=self.config.get_data_dir() / session.cam_mp4_path,
+                        screen_video_path=self.config.get_data_dir() / session.screen_mp4_path if session.screen_mp4_path else None,
+                        run_hume=self.config.is_hume_ai_enabled(),
+                        run_memories=self.config.is_memories_ai_enabled()
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to upload session {session.session_id}: {e}")
+            
+            # Complete
+            def on_complete():
+                progress.close()
+                progress.deleteLater()
+                self._load_sessions_list()
+                
+                QMessageBox.information(
+                    self,
+                    "Batch Upload Complete",
+                    f"Successfully uploaded {len(uploadable_sessions)} session(s).\n\n"
+                    "Cloud processing started. Check back in 5-10 minutes."
+                )
+            
+            QTimer.singleShot(0, on_complete)
+        
+        thread = threading.Thread(target=batch_upload_worker, daemon=True)
+        thread.start()
 
     def _create_session_card(self, session, cloud_jobs):
         """
@@ -2224,7 +2682,9 @@ class MainWindow(QMainWindow):
                 # Check if upload is in progress for this session
                 is_uploading = session.session_id in self.active_uploads
 
-                upload_btn = QPushButton("Uploading..." if is_uploading else "Upload to Cloud for Analysis")
+                # Enhanced upload button with progress indicator
+                btn_text = "⬆️ Uploading..." if is_uploading else "☁️ Upload to Cloud for Analysis"
+                upload_btn = QPushButton(btn_text)
                 upload_btn.setEnabled(not is_uploading)  # Disable if uploading
                 upload_btn.setStyleSheet("""
                     QPushButton {
@@ -2244,6 +2704,16 @@ class MainWindow(QMainWindow):
                         color: #ecf0f1;
                     }
                 """)
+                
+                # Add tooltip with cost estimate
+                duration_sec = (session.ended_at - session.started_at).total_seconds() if session.ended_at else 0
+                cost_estimate = (duration_sec / 120) * 2 * 0.055  # Rough estimate
+                upload_btn.setToolTip(
+                    f"Upload videos for cloud analysis\n"
+                    f"Estimated cost: ${cost_estimate:.2f}\n"
+                    f"Processing time: 5-10 minutes"
+                )
+                
                 upload_btn.clicked.connect(lambda: self._on_upload_to_cloud(session.session_id))
                 layout.addWidget(upload_btn, row, 0, 1, 2)
                 row += 1
@@ -2259,7 +2729,9 @@ class MainWindow(QMainWindow):
                     # Check if this job is currently being refreshed
                     is_refreshing = job.job_id in self.active_refresh_jobs
 
-                    refresh_btn = QPushButton("Checking..." if is_refreshing else "Check Status")
+                    # Create button with spinner icon when checking
+                    btn_text = "🔄 Checking..." if is_refreshing else "🔍 Check Status"
+                    refresh_btn = QPushButton(btn_text)
                     refresh_btn.setEnabled(not is_refreshing)  # Disable if refreshing
                     refresh_btn.setStyleSheet("""
                         QPushButton {
@@ -2269,6 +2741,7 @@ class MainWindow(QMainWindow):
                             border-radius: 4px;
                             padding: 4px 12px;
                             font-size: 12px;
+                            font-weight: bold;
                         }
                         QPushButton:hover {
                             background-color: #2980b9;
@@ -2278,6 +2751,7 @@ class MainWindow(QMainWindow):
                             color: #ecf0f1;
                         }
                     """)
+                    refresh_btn.setToolTip("Check if cloud processing is complete and retrieve results")
                     refresh_btn.clicked.connect(lambda checked, jid=job.job_id: self._on_refresh_job(jid))
                     layout.addWidget(refresh_btn, row, 1)
 
@@ -2431,19 +2905,19 @@ class MainWindow(QMainWindow):
             return f"${low_estimate:.2f}-${high_estimate:.2f}"
 
     def _get_status_badge(self, status) -> str:
-        """Get HTML status badge."""
+        """Get enhanced status badge with icons and colors."""
         from ..core.models import CloudJobStatus
 
-        colors = {
-            CloudJobStatus.PENDING: "#95a5a6",
-            CloudJobStatus.UPLOADING: "#f39c12",
-            CloudJobStatus.PROCESSING: "#3498db",
-            CloudJobStatus.COMPLETED: "#27ae60",
-            CloudJobStatus.FAILED: "#e74c3c"
+        badges = {
+            CloudJobStatus.PENDING: ('⏸️', '#95a5a6', 'PENDING'),
+            CloudJobStatus.UPLOADING: ('⬆️', '#f39c12', 'UPLOADING'),
+            CloudJobStatus.PROCESSING: ('🔄', '#3498db', 'PROCESSING'),
+            CloudJobStatus.COMPLETED: ('✅', '#27ae60', 'COMPLETED'),
+            CloudJobStatus.FAILED: ('❌', '#e74c3c', 'FAILED')
         }
 
-        color = colors.get(status, "#95a5a6")
-        return f'<span style="color: {color}; font-weight: bold;">{status.value.upper()}</span>'
+        icon, color, text = badges.get(status, ('❓', '#95a5a6', 'UNKNOWN'))
+        return f'<span style="color: {color}; font-weight: bold;">{icon} {text}</span>'
 
     def _on_refresh_all_sessions(self):
         """Refresh all sessions with processing cloud jobs."""
