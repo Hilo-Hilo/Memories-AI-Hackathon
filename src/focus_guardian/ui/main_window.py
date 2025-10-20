@@ -19,6 +19,8 @@ from ..core.database import Database
 from ..core.models import QualityProfile
 from ..session.session_manager import SessionManager
 from ..utils.logger import get_logger
+from ..ai.summary_generator import AISummaryGenerator
+from ..ai.emotion_aware_messaging import EmotionAwareMessenger, EmotionState
 
 logger = get_logger(__name__)
 
@@ -61,6 +63,8 @@ class MainWindow(QMainWindow):
         # Cloud upload tracking
         self.active_uploads = {}  # Dict[session_id, List[job_id]]
         self.active_refresh_jobs = set()  # Set[job_id] - Track jobs being refreshed
+        self.job_last_checked = {}  # Dict[job_id, timestamp] - Track when jobs were last checked
+        self.job_auto_refresh_timers = {}  # Dict[job_id, QTimer] - Auto-refresh timers for PROCESSING jobs
 
         # Setup UI
         self._setup_ui()
@@ -83,6 +87,19 @@ class MainWindow(QMainWindow):
         
         # Task history for quick selection
         self.task_history = self._load_task_history()
+        
+        # Initialize AI components
+        self.ai_summary_generator = None
+        self.emotion_messenger = EmotionAwareMessenger()
+        
+        # Initialize AI summary generator if API key available
+        openai_key = self.config.get_openai_api_key()
+        if openai_key:
+            try:
+                self.ai_summary_generator = AISummaryGenerator(openai_key, self.database)
+                logger.info("AI summary generator initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize AI summary generator: {e}")
         
         logger.info("Main window initialized")
     
@@ -1324,33 +1341,63 @@ class MainWindow(QMainWindow):
             pass
     
     def _handle_distraction_alert(self, alert_data: dict):
-        """Handle distraction alert from detector."""
+        """Handle distraction alert with emotion-aware messaging."""
         logger.info(f"🔔 DISTRACTION ALERT RECEIVED: {alert_data}")
         
         # Get alert details
-        message = alert_data.get("message", "Distraction detected")
         distraction_type = alert_data.get("distraction_type", "Unknown")
         confidence = alert_data.get("confidence", 0.0)
         vision_votes = alert_data.get("vision_votes", {})
+        duration_minutes = alert_data.get("duration_minutes", 0)
         
-        # Build detailed message
-        details = f"Type: {distraction_type}\nConfidence: {confidence:.0%}"
+        # Get current task name
+        task_name = self.task_label.text().replace('Task: ', '')
         
-        if vision_votes:
-            details += "\n\nDetected patterns:"
-            for label, count in vision_votes.items():
-                details += f"\n  • {label}: {count}/3 snapshots"
+        # Detect emotion state (placeholder - will be enhanced with real Hume data)
+        emotion_state = EmotionState.UNKNOWN  # TODO: Get from recent Hume data
         
-        # Show alert dialog
-        QMessageBox.warning(
-            self,
-            "🔔 Focus Alert - Distraction Detected",
-            f"{message}\n\n{details}\n\n"
-            f"Refocus on your task: {self.task_label.text().replace('Task: ', '')}",
-            QMessageBox.StandardButton.Ok
+        # Generate emotion-aware alert message
+        alert_message = self.emotion_messenger.generate_distraction_alert(
+            distraction_type=distraction_type,
+            duration_minutes=duration_minutes,
+            task_name=task_name,
+            emotion_state=emotion_state
         )
         
-        logger.info("Alert dialog shown to user")
+        # Build detailed evidence section
+        evidence = f"<b>Detection Confidence:</b> {confidence:.0%}<br><br>"
+        
+        if vision_votes:
+            evidence += "<b>AI detected across multiple snapshots:</b><br>"
+            for label, count in vision_votes.items():
+                evidence += f"• {label}: {count}/3 snapshots<br>"
+        
+        # Create custom message box with rich formatting
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(alert_message["title"])
+        msg_box.setIcon(QMessageBox.Icon.Information)  # Less alarming than Warning
+        
+        # Format message with HTML
+        formatted_message = f"""<div style="color: #2c3e50; line-height: 1.5;">
+<p>{alert_message['message']}</p>
+<hr style="margin: 15px 0;">
+<div style="background-color: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px;">
+{evidence}
+</div>
+</div>"""
+        
+        msg_box.setText(formatted_message)
+        msg_box.setTextFormat(Qt.TextFormat.RichText)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        
+        # Add custom buttons based on emotion state if available
+        if "actions" in alert_message and alert_message["actions"]:
+            # Could add custom buttons here for actions
+            pass
+        
+        msg_box.exec()
+        
+        logger.info(f"Emotion-aware alert shown (tone: {alert_message.get('tone', 'neutral')})")
     
     def _handle_micro_break_suggestion(self, suggestion_data: dict):
         """Handle micro-break suggestion."""
@@ -1367,7 +1414,7 @@ class MainWindow(QMainWindow):
     
     def _show_session_summary(self, session_id: str, auto_upload_success: bool = None, auto_upload_error: str = None):
         """
-        Show session summary report after session ends.
+        Show AI-enhanced session summary report after session ends.
 
         Args:
             session_id: Session ID to show summary for
@@ -1382,6 +1429,9 @@ class MainWindow(QMainWindow):
                 logger.warning("No report available for session")
                 return
 
+            # Get session object
+            session = self.database.get_session(session_id)
+
             # Extract key metrics
             kpis = report_data.get("kpis", {})
             meta = report_data.get("meta", {})
@@ -1389,32 +1439,105 @@ class MainWindow(QMainWindow):
 
             # Build summary message
             duration = meta.get("total_duration_minutes", 0)
-            focus_ratio = kpis.get("focus_ratio", 0) * 100
+            focus_ratio = kpis.get("focus_ratio", 0)
+            focus_pct = focus_ratio * 100
             num_alerts = kpis.get("num_alerts", 0)
             avg_focus = kpis.get("avg_focus_bout_min", 0)
 
-            summary = f"""<div style="color: #2c3e50;">
-<h2>Session Summary</h2>
-<p><b>Duration:</b> {duration:.1f} minutes</p>
-<p><b>Focus Ratio:</b> {focus_ratio:.0f}%</p>
-<p><b>Distractions Detected:</b> {num_alerts}</p>
-<p><b>Average Focus Bout:</b> {avg_focus:.1f} minutes</p>"""
+            # Generate AI-powered summary if available
+            ai_summaries = None
+            if self.ai_summary_generator:
+                try:
+                    logger.info("Generating AI-powered session summary...")
+                    ai_summaries = self.ai_summary_generator.generate_session_summary(
+                        session=session,
+                        report_data=report_data,
+                        emotion_data=None,  # Will be enhanced later
+                        include_history=True
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to generate AI summary: {e}")
 
+            # Build enhanced summary with AI insights
+            summary = f"""<div style="color: #2c3e50; line-height: 1.6;">"""
+
+            # AI Executive Summary (if available)
+            if ai_summaries and ai_summaries.get("executive"):
+                summary += f"""
+<div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; border-left: 4px solid #27ae60; margin-bottom: 20px;">
+    <p style="font-size: 16px; margin: 0; font-weight: 500;">✨ {ai_summaries['executive']}</p>
+</div>"""
+
+            # Session Statistics
+            summary += f"""<h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px;">📊 Session Statistics</h2>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0;">
+    <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+        <p style="margin: 0; color: #7f8c8d; font-size: 12px;">DURATION</p>
+        <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: bold; color: #3498db;">⏱️ {duration:.0f} min</p>
+    </div>
+    <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+        <p style="margin: 0; color: #7f8c8d; font-size: 12px;">FOCUS RATIO</p>
+        <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: bold; color: {'#27ae60' if focus_pct >= 75 else '#f39c12' if focus_pct >= 50 else '#e74c3c'};">✓ {focus_pct:.0f}%</p>
+    </div>
+    <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+        <p style="margin: 0; color: #7f8c8d; font-size: 12px;">DISTRACTIONS</p>
+        <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: bold; color: #e74c3c;">⚠️ {num_alerts}</p>
+    </div>
+    <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+        <p style="margin: 0; color: #7f8c8d; font-size: 12px;">AVG FOCUS BOUT</p>
+        <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: bold; color: #9b59b6;">📈 {avg_focus:.0f} min</p>
+    </div>
+</div>"""
+
+            # AI Highlights (if available)
+            if ai_summaries and ai_summaries.get("highlights"):
+                summary += f"""
+<h3 style="color: #2c3e50; margin-top: 20px;">🌟 Session Highlights</h3>
+<div style="background-color: #fff3cd; padding: 12px; border-radius: 6px; border-left: 4px solid #f39c12;">
+    {ai_summaries['highlights'].replace('- ', '<br>• ')}
+</div>"""
+
+            # Comparative Insight (if available)
+            if self.ai_summary_generator:
+                try:
+                    comparative = self.ai_summary_generator.generate_comparative_insight(session, report_data)
+                    if comparative:
+                        summary += f"""
+<div style="background-color: #e3f2fd; padding: 12px; border-radius: 6px; margin-top: 15px; border-left: 4px solid #3498db;">
+    <p style="margin: 0; font-size: 14px;">📊 {comparative}</p>
+</div>"""
+                except Exception as e:
+                    logger.error(f"Failed to generate comparative insight: {e}")
+
+            # Top Triggers
             if kpis.get("top_triggers"):
-                triggers = ", ".join(kpis["top_triggers"])
-                summary += f"<p><b>Top Distractors:</b> {triggers}</p>"
+                triggers = kpis["top_triggers"]
+                summary += f"""
+<h3 style="color: #2c3e50; margin-top: 20px;">🎯 Top Distractors</h3>
+<p>{'<br>'.join(f'• {trigger}' for trigger in triggers[:3])}</p>"""
 
             # Add auto-upload status if triggered
             if auto_upload_success is not None:
-                summary += "<hr><h3>Cloud Upload Status</h3>"
+                summary += "<hr style='margin: 20px 0;'><h3 style='color: #2c3e50;'>☁️ Cloud Upload Status</h3>"
                 if auto_upload_success:
-                    summary += '<p style="color: #27ae60;"><b>✓ Auto-uploaded to cloud</b></p>'
-                    summary += "<p>Videos are being processed. Check Reports tab for results in 5-10 minutes.</p>"
+                    summary += '<div style="background-color: #d4edda; padding: 12px; border-radius: 6px; border-left: 4px solid #27ae60;">'
+                    summary += '<p style="margin: 0; color: #155724;"><b>✓ Auto-uploaded to cloud successfully</b></p>'
+                    summary += "<p style='margin: 8px 0 0 0; color: #155724;'>Videos are being processed. Check Reports tab for results in 5-10 minutes.</p>"
+                    summary += '</div>'
                 else:
-                    summary += '<p style="color: #e74c3c;"><b>✗ Auto-upload failed</b></p>'
+                    summary += '<div style="background-color: #f8d7da; padding: 12px; border-radius: 6px; border-left: 4px solid #e74c3c;">'
+                    summary += '<p style="margin: 0; color: #721c24;"><b>✗ Auto-upload failed</b></p>'
                     if auto_upload_error:
-                        summary += f"<p><small>Error: {auto_upload_error}</small></p>"
-                    summary += "<p>You can retry manually from the Reports tab.</p>"
+                        summary += f"<p style='margin: 8px 0 0 0; color: #721c24; font-size: 12px;'>Error: {auto_upload_error}</p>"
+                    summary += "<p style='margin: 8px 0 0 0; color: #721c24;'>You can retry manually from the Reports tab.</p>"
+                    summary += '</div>'
+
+            # AI Encouragement (if available)
+            if ai_summaries and ai_summaries.get("encouragement"):
+                summary += f"""
+<div style="background-color: #f3e5f5; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: center; border: 2px solid #9b59b6;">
+    <p style="margin: 0; font-size: 15px; color: #6a1b9a; font-weight: 500;">💜 {ai_summaries['encouragement']}</p>
+</div>"""
 
             if recommendations:
                 summary += "<h3>Recommendations:</h3><ul>"
@@ -2731,6 +2854,22 @@ class MainWindow(QMainWindow):
 
                     # Create button with spinner icon when checking
                     btn_text = "🔄 Checking..." if is_refreshing else "🔍 Check Status"
+                    
+                    # Add last checked timestamp if available
+                    if job.job_id in self.job_last_checked:
+                        from datetime import datetime
+                        last_check = self.job_last_checked[job.job_id]
+                        elapsed = (datetime.now() - last_check).total_seconds()
+                        
+                        if elapsed < 60:
+                            time_str = f"{int(elapsed)}s ago"
+                        elif elapsed < 3600:
+                            time_str = f"{int(elapsed / 60)}m ago"
+                        else:
+                            time_str = f"{int(elapsed / 3600)}h ago"
+                        
+                        btn_text += f" ({time_str})" if not is_refreshing else ""
+                    
                     refresh_btn = QPushButton(btn_text)
                     refresh_btn.setEnabled(not is_refreshing)  # Disable if refreshing
                     refresh_btn.setStyleSheet("""
@@ -2751,7 +2890,12 @@ class MainWindow(QMainWindow):
                             color: #ecf0f1;
                         }
                     """)
-                    refresh_btn.setToolTip("Check if cloud processing is complete and retrieve results")
+                    
+                    tooltip_text = "Check if cloud processing is complete and retrieve results"
+                    if job.job_id in self.job_auto_refresh_timers:
+                        tooltip_text += "\n\nAuto-refresh: Will check automatically every 60 seconds"
+                    
+                    refresh_btn.setToolTip(tooltip_text)
                     refresh_btn.clicked.connect(lambda checked, jid=job.job_id: self._on_refresh_job(jid))
                     layout.addWidget(refresh_btn, row, 1)
 
@@ -2997,9 +3141,21 @@ class MainWindow(QMainWindow):
 
                 # CRITICAL: Schedule UI update on main thread (CANNOT modify Qt widgets from background thread!)
                 def on_refresh_complete():
+                    # Update last checked timestamp
+                    from datetime import datetime
+                    self.job_last_checked[job_id] = datetime.now()
+                    
                     # Remove from active refreshes
                     if job_id in self.active_refresh_jobs:
                         self.active_refresh_jobs.remove(job_id)
+                    
+                    # Setup auto-refresh timer for PROCESSING jobs
+                    if status == CloudJobStatus.PROCESSING:
+                        self._setup_auto_refresh_timer(job_id)
+                    else:
+                        # Job completed or failed, stop auto-refresh
+                        self._cancel_auto_refresh_timer(job_id)
+                    
                     # Reload sessions list to update button state
                     self._load_sessions_list()
 
@@ -3018,6 +3174,46 @@ class MainWindow(QMainWindow):
 
         thread = threading.Thread(target=refresh_worker, daemon=True)
         thread.start()
+    
+    def _setup_auto_refresh_timer(self, job_id: str) -> None:
+        """Setup auto-refresh timer for PROCESSING cloud job."""
+        # Cancel existing timer if any
+        self._cancel_auto_refresh_timer(job_id)
+        
+        # Create new timer (60 second interval)
+        timer = QTimer()
+        timer.timeout.connect(lambda: self._auto_refresh_job(job_id))
+        timer.start(60000)  # 60 seconds
+        
+        self.job_auto_refresh_timers[job_id] = timer
+        logger.info(f"Auto-refresh timer started for job {job_id} (60s interval)")
+    
+    def _cancel_auto_refresh_timer(self, job_id: str) -> None:
+        """Cancel auto-refresh timer for a job."""
+        if job_id in self.job_auto_refresh_timers:
+            timer = self.job_auto_refresh_timers[job_id]
+            timer.stop()
+            del self.job_auto_refresh_timers[job_id]
+            logger.info(f"Auto-refresh timer cancelled for job {job_id}")
+    
+    def _auto_refresh_job(self, job_id: str) -> None:
+        """Auto-refresh a job (called by timer)."""
+        # Check if job still exists and is still processing
+        job = self.database.get_cloud_job(job_id)
+        if not job:
+            self._cancel_auto_refresh_timer(job_id)
+            return
+        
+        from ..core.models import CloudJobStatus
+        if job.status != CloudJobStatus.PROCESSING:
+            # Job no longer processing, cancel auto-refresh
+            self._cancel_auto_refresh_timer(job_id)
+            self._load_sessions_list()  # Refresh UI
+            return
+        
+        # Trigger manual refresh
+        logger.info(f"Auto-refreshing job {job_id}...")
+        self._on_refresh_job(job_id)
 
     def _on_show_cloud_details(self, job_id: str):
         """
