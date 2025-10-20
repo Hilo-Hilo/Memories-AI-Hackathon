@@ -18,7 +18,7 @@ import json
 
 from ..core.config import Config
 from ..core.database import Database
-from ..core.models import QualityProfile
+from ..core.models import QualityProfile, CAM_LABELS, SCREEN_LABELS
 from ..session.session_manager import SessionManager
 from ..utils.logger import get_logger
 from ..ai.summary_generator import AISummaryGenerator
