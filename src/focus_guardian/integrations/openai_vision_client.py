@@ -233,7 +233,7 @@ Return as JSON:
                         ]
                     }
                 ],
-                max_tokens=300,
+                max_completion_tokens=300,  # Changed from max_tokens for newer models (gpt-5-nano, gpt-4o-mini)
                 temperature=0.1  # Low temperature for consistent classifications
             )
             

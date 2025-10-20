@@ -8,7 +8,8 @@ and tabbed interface for dashboard, reports, and settings.
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QPushButton, QLabel, QStatusBar,
-    QSystemTrayIcon, QMenu, QMessageBox, QApplication
+    QSystemTrayIcon, QMenu, QMessageBox, QApplication,
+    QCheckBox
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
@@ -56,7 +57,11 @@ class MainWindow(QMainWindow):
         self.session_elapsed_seconds = 0
         self.session_paused_at = None
         self.session_total_paused_seconds = 0
-        
+
+        # Cloud upload tracking
+        self.active_uploads = {}  # Dict[session_id, List[job_id]]
+        self.active_refresh_jobs = set()  # Set[job_id] - Track jobs being refreshed
+
         # Setup UI
         self._setup_ui()
         self._setup_menu_bar()
@@ -240,20 +245,55 @@ class MainWindow(QMainWindow):
     
     def _create_reports_tab(self) -> QWidget:
         """Create reports tab for session history."""
+        from PyQt6.QtWidgets import QScrollArea, QFrame
+
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        
+
+        # Header
+        header_layout = QHBoxLayout()
         label = QLabel("Session Reports")
         label.setStyleSheet("font-size: 20px; font-weight: bold;")
-        layout.addWidget(label)
-        
-        placeholder = QLabel("Session history will appear here")
-        placeholder.setStyleSheet("color: #7f8c8d; font-size: 14px;")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(placeholder)
-        
-        layout.addStretch()
-        
+        header_layout.addWidget(label)
+
+        # Refresh all button
+        self.refresh_all_btn = QPushButton("Refresh All")
+        self.refresh_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        self.refresh_all_btn.clicked.connect(self._on_refresh_all_sessions)
+        header_layout.addWidget(self.refresh_all_btn)
+        header_layout.addStretch()
+
+        layout.addLayout(header_layout)
+
+        # Scroll area for sessions list
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+
+        # Container for session cards
+        self.sessions_container = QWidget()
+        self.sessions_layout = QVBoxLayout(self.sessions_container)
+        self.sessions_layout.setSpacing(10)
+        self.sessions_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        scroll_area.setWidget(self.sessions_container)
+        layout.addWidget(scroll_area)
+
+        # Load sessions on tab creation
+        self._load_sessions_list()
+
         return widget
     
     def _create_settings_tab(self) -> QWidget:
@@ -413,6 +453,134 @@ class MainWindow(QMainWindow):
         api_layout.addWidget(mem_status)
 
         layout.addWidget(api_group)
+
+        # Cloud Features section
+        cloud_group = QGroupBox("Cloud Features (Post-Session Analysis)")
+        cloud_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        cloud_layout = QVBoxLayout(cloud_group)
+
+        # Master switch for cloud features
+        self.cloud_features_checkbox = QCheckBox("Enable Cloud Features")
+        self.cloud_features_checkbox.setChecked(self.config.is_cloud_features_enabled())
+        self.cloud_features_checkbox.setStyleSheet("font-size: 14px; font-weight: normal;")
+        self.cloud_features_checkbox.stateChanged.connect(self._on_cloud_features_toggled)
+        cloud_layout.addWidget(self.cloud_features_checkbox)
+
+        # Description
+        cloud_desc = QLabel(
+            "Upload session videos to cloud services for advanced post-processing analysis.\n"
+            "Videos are only uploaded AFTER the session ends if auto-upload is enabled."
+        )
+        cloud_desc.setStyleSheet("color: #7f8c8d; font-size: 11px; margin-left: 20px;")
+        cloud_desc.setWordWrap(True)
+        cloud_layout.addWidget(cloud_desc)
+
+        # Spacer
+        cloud_layout.addSpacing(10)
+
+        # Hume AI section
+        hume_container = QWidget()
+        hume_layout = QVBoxLayout(hume_container)
+        hume_layout.setContentsMargins(20, 0, 0, 0)
+
+        self.hume_ai_checkbox = QCheckBox("Enable Hume AI (Emotion Analysis)")
+        self.hume_ai_checkbox.setChecked(self.config.is_hume_ai_enabled())
+        self.hume_ai_checkbox.setStyleSheet("font-size: 13px; font-weight: normal;")
+        self.hume_ai_checkbox.stateChanged.connect(self._on_hume_ai_toggled)
+        self.hume_ai_checkbox.setEnabled(self.config.is_cloud_features_enabled())
+        hume_layout.addWidget(self.hume_ai_checkbox)
+
+        self.hume_auto_upload_checkbox = QCheckBox("Auto-upload after each session")
+        self.hume_auto_upload_checkbox.setChecked(self.config.is_hume_ai_auto_upload())
+        self.hume_auto_upload_checkbox.setStyleSheet("font-size: 12px; font-weight: normal; margin-left: 20px;")
+        self.hume_auto_upload_checkbox.stateChanged.connect(self._on_hume_auto_upload_toggled)
+        self.hume_auto_upload_checkbox.setEnabled(
+            self.config.is_cloud_features_enabled() and self.config.is_hume_ai_enabled()
+        )
+        hume_layout.addWidget(self.hume_auto_upload_checkbox)
+
+        hume_info = QLabel("Analyzes facial expressions for emotion timeline (frustration, boredom, stress)")
+        hume_info.setStyleSheet("color: #95a5a6; font-size: 10px; margin-left: 40px;")
+        hume_info.setWordWrap(True)
+        hume_layout.addWidget(hume_info)
+
+        cloud_layout.addWidget(hume_container)
+
+        # Spacer
+        cloud_layout.addSpacing(10)
+
+        # Memories.ai section
+        memories_container = QWidget()
+        memories_layout = QVBoxLayout(memories_container)
+        memories_layout.setContentsMargins(20, 0, 0, 0)
+
+        self.memories_ai_checkbox = QCheckBox("Enable Memories.ai (Pattern Analysis)")
+        self.memories_ai_checkbox.setChecked(self.config.is_memories_ai_enabled())
+        self.memories_ai_checkbox.setStyleSheet("font-size: 13px; font-weight: normal;")
+        self.memories_ai_checkbox.stateChanged.connect(self._on_memories_ai_toggled)
+        self.memories_ai_checkbox.setEnabled(self.config.is_cloud_features_enabled())
+        memories_layout.addWidget(self.memories_ai_checkbox)
+
+        self.memories_auto_upload_checkbox = QCheckBox("Auto-upload after each session")
+        self.memories_auto_upload_checkbox.setChecked(self.config.is_memories_ai_auto_upload())
+        self.memories_auto_upload_checkbox.setStyleSheet("font-size: 12px; font-weight: normal; margin-left: 20px;")
+        self.memories_auto_upload_checkbox.stateChanged.connect(self._on_memories_auto_upload_toggled)
+        self.memories_auto_upload_checkbox.setEnabled(
+            self.config.is_cloud_features_enabled() and self.config.is_memories_ai_enabled()
+        )
+        memories_layout.addWidget(self.memories_auto_upload_checkbox)
+
+        memories_info = QLabel("Comprehensive VLM analysis: task detection, app usage, distraction patterns")
+        memories_info.setStyleSheet("color: #95a5a6; font-size: 10px; margin-left: 40px;")
+        memories_info.setWordWrap(True)
+        memories_layout.addWidget(memories_info)
+
+        cloud_layout.addWidget(memories_container)
+
+        # Privacy notice
+        privacy_notice = QLabel(
+            "Privacy: Full videos stay local by default. They are only uploaded to cloud services "
+            "when you enable auto-upload or manually request cloud analysis."
+        )
+        privacy_notice.setStyleSheet("color: #e67e22; font-size: 11px; margin-top: 10px; font-style: italic;")
+        privacy_notice.setWordWrap(True)
+        cloud_layout.addWidget(privacy_notice)
+
+        # Cloud Storage Management button
+        storage_mgmt_btn = QPushButton("🗄️ Manage Cloud Storage")
+        storage_mgmt_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: bold;
+                margin-top: 15px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        storage_mgmt_btn.clicked.connect(self._on_manage_cloud_storage)
+        cloud_layout.addWidget(storage_mgmt_btn)
+
+        layout.addWidget(cloud_group)
 
         layout.addStretch()
 
@@ -736,42 +904,51 @@ class MainWindow(QMainWindow):
     def _on_stop_session(self):
         """Handle stop session button click."""
         logger.info("Stop session requested")
-        
+
         reply = QMessageBox.question(
             self,
             "Stop Session",
             "Are you sure you want to stop the current session?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
-        
+
         if reply == QMessageBox.StandardButton.Yes:
             self.session_timer.stop()
             self.stats_timer.stop()
-            
+
             self.session_status_label.setText("No active session")
             self.session_timer_label.setText("00:00:00")
             self.task_label.setText("Task: None")
-            
+
             self.start_button.setEnabled(True)
             self.pause_button.setEnabled(False)
             self.pause_button.setText("Pause")  # Reset text
             self.stop_button.setEnabled(False)
-            
+
             self.session_active = False
             self.session_start_time = None
             self.session_elapsed_seconds = 0
             self.session_paused_at = None
             self.session_total_paused_seconds = 0
             self.status_bar.showMessage("Session stopped")
-            
+
             # Stop session manager and get report
             try:
                 stopped_session_id = self.session_manager.stop_session()
                 logger.info(f"Session manager stopped: {stopped_session_id}")
-                
-                # Show session summary
+
+                # Check if auto-upload is enabled
                 if stopped_session_id:
-                    self._show_session_summary(stopped_session_id)
+                    hume_auto = self.config.is_hume_ai_auto_upload()
+                    memories_auto = self.config.is_memories_ai_auto_upload()
+
+                    if hume_auto or memories_auto:
+                        # Auto-upload enabled - trigger upload with progress UI
+                        logger.info("Auto-upload enabled, triggering cloud upload")
+                        self._auto_upload_session(stopped_session_id, hume_auto, memories_auto)
+                    else:
+                        # No auto-upload - just show summary
+                        self._show_session_summary(stopped_session_id)
             except Exception as e:
                 logger.error(f"Failed to stop session: {e}", exc_info=True)
     
@@ -873,51 +1050,74 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Ok
         )
     
-    def _show_session_summary(self, session_id: str):
-        """Show session summary report after session ends."""
+    def _show_session_summary(self, session_id: str, auto_upload_success: bool = None, auto_upload_error: str = None):
+        """
+        Show session summary report after session ends.
+
+        Args:
+            session_id: Session ID to show summary for
+            auto_upload_success: If auto-upload was triggered, whether it succeeded (None = not triggered)
+            auto_upload_error: Error message if auto-upload failed
+        """
         try:
             # Get report from database
             report_data = self.database.get_session_report(session_id)
-            
+
             if not report_data:
                 logger.warning("No report available for session")
                 return
-            
+
             # Extract key metrics
             kpis = report_data.get("kpis", {})
             meta = report_data.get("meta", {})
             recommendations = report_data.get("recommendations", [])
-            
+
             # Build summary message
             duration = meta.get("total_duration_minutes", 0)
             focus_ratio = kpis.get("focus_ratio", 0) * 100
             num_alerts = kpis.get("num_alerts", 0)
             avg_focus = kpis.get("avg_focus_bout_min", 0)
-            
-            summary = f"""<h2>Session Summary</h2>
+
+            summary = f"""<div style="color: #2c3e50;">
+<h2>Session Summary</h2>
 <p><b>Duration:</b> {duration:.1f} minutes</p>
 <p><b>Focus Ratio:</b> {focus_ratio:.0f}%</p>
 <p><b>Distractions Detected:</b> {num_alerts}</p>
 <p><b>Average Focus Bout:</b> {avg_focus:.1f} minutes</p>"""
-            
+
             if kpis.get("top_triggers"):
                 triggers = ", ".join(kpis["top_triggers"])
                 summary += f"<p><b>Top Distractors:</b> {triggers}</p>"
-            
+
+            # Add auto-upload status if triggered
+            if auto_upload_success is not None:
+                summary += "<hr><h3>Cloud Upload Status</h3>"
+                if auto_upload_success:
+                    summary += '<p style="color: #27ae60;"><b>✓ Auto-uploaded to cloud</b></p>'
+                    summary += "<p>Videos are being processed. Check Reports tab for results in 5-10 minutes.</p>"
+                else:
+                    summary += '<p style="color: #e74c3c;"><b>✗ Auto-upload failed</b></p>'
+                    if auto_upload_error:
+                        summary += f"<p><small>Error: {auto_upload_error}</small></p>"
+                    summary += "<p>You can retry manually from the Reports tab.</p>"
+
             if recommendations:
                 summary += "<h3>Recommendations:</h3><ul>"
                 for rec in recommendations[:3]:  # Show top 3
                     summary += f"<li>{rec.get('message', '')}</li>"
                 summary += "</ul>"
-            
+
+            summary += "</div>"
+
             # Show dialog
-            QMessageBox.information(
-                self,
-                "Session Complete",
-                summary,
-                QMessageBox.StandardButton.Ok
-            )
-            
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Session Complete")
+            msg_box.setText(summary)
+            msg_box.setIcon(QMessageBox.Icon.Information)
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setTextFormat(Qt.TextFormat.RichText)
+            msg_box.exec()
+
         except Exception as e:
             logger.error(f"Failed to show session summary: {e}", exc_info=True)
     
@@ -932,8 +1132,1768 @@ class MainWindow(QMainWindow):
             "<p>© 2025 Focus Guardian Team</p>"
         )
     
+    def _on_cloud_features_toggled(self, state):
+        """Handle cloud features master switch toggle."""
+        enabled = (state == Qt.CheckState.Checked.value)
+        self.config.set_cloud_features_enabled(enabled)
+
+        # Update dependent checkboxes
+        self.hume_ai_checkbox.setEnabled(enabled)
+        self.memories_ai_checkbox.setEnabled(enabled)
+
+        # Disable auto-upload if master switch is off
+        if not enabled:
+            self.hume_auto_upload_checkbox.setEnabled(False)
+            self.memories_auto_upload_checkbox.setEnabled(False)
+        else:
+            # Re-enable based on individual feature settings
+            self.hume_auto_upload_checkbox.setEnabled(self.config.is_hume_ai_enabled())
+            self.memories_auto_upload_checkbox.setEnabled(self.config.is_memories_ai_enabled())
+
+        logger.info(f"Cloud features {'enabled' if enabled else 'disabled'}")
+
+    def _on_hume_ai_toggled(self, state):
+        """Handle Hume AI toggle."""
+        enabled = (state == Qt.CheckState.Checked.value)
+        self.config.set_hume_ai_enabled(enabled)
+
+        # Update auto-upload checkbox availability
+        self.hume_auto_upload_checkbox.setEnabled(enabled and self.config.is_cloud_features_enabled())
+
+        # Check if API key is configured
+        if enabled and not self.config.get_hume_api_key():
+            QMessageBox.warning(
+                self,
+                "API Key Required",
+                "Hume AI API key is not configured. Please set HUME_API_KEY in your .env file."
+            )
+
+        logger.info(f"Hume AI {'enabled' if enabled else 'disabled'}")
+
+    def _on_hume_auto_upload_toggled(self, state):
+        """Handle Hume AI auto-upload toggle."""
+        enabled = (state == Qt.CheckState.Checked.value)
+        self.config.set_hume_ai_auto_upload(enabled)
+        logger.info(f"Hume AI auto-upload {'enabled' if enabled else 'disabled'}")
+
+    def _on_memories_ai_toggled(self, state):
+        """Handle Memories.ai toggle."""
+        enabled = (state == Qt.CheckState.Checked.value)
+        self.config.set_memories_ai_enabled(enabled)
+
+        # Update auto-upload checkbox availability
+        self.memories_auto_upload_checkbox.setEnabled(enabled and self.config.is_cloud_features_enabled())
+
+        # Check if API key is configured
+        if enabled and not self.config.get_memories_api_key():
+            QMessageBox.warning(
+                self,
+                "API Key Required",
+                "Memories.ai API key is not configured. Please set MEM_AI_API_KEY in your .env file."
+            )
+
+        logger.info(f"Memories.ai {'enabled' if enabled else 'disabled'}")
+
+    def _on_memories_auto_upload_toggled(self, state):
+        """Handle Memories.ai auto-upload toggle."""
+        enabled = (state == Qt.CheckState.Checked.value)
+        self.config.set_memories_ai_auto_upload(enabled)
+        logger.info(f"Memories.ai auto-upload {'enabled' if enabled else 'disabled'}")
+
+    def _on_manage_cloud_storage(self):
+        """Show cloud storage management dialog with API-queried data."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, QDialogButtonBox
+        from PyQt6.QtCore import QTimer
+        import threading
+
+        logger.info("Opening cloud storage management dialog")
+
+        # Show loading dialog
+        loading = QMessageBox(self)
+        loading.setWindowTitle("Loading...")
+        loading.setText("Querying cloud storage APIs...\n\nThis may take a few seconds.")
+        loading.setStandardButtons(QMessageBox.StandardButton.NoButton)
+        loading.show()
+        QApplication.processEvents()
+
+        # Query cloud APIs in background thread
+        summary = {}
+        error_msg = None
+
+        def query_worker():
+            nonlocal summary, error_msg
+            try:
+                summary = self.session_manager.cloud_analysis_manager.get_storage_summary()
+            except Exception as e:
+                logger.error(f"Failed to query cloud storage: {e}", exc_info=True)
+                error_msg = str(e)
+
+        thread = threading.Thread(target=query_worker, daemon=True)
+        thread.start()
+        thread.join(timeout=30)  # 30 second timeout
+
+        loading.close()
+
+        # Check for errors
+        if error_msg:
+            QMessageBox.critical(
+                self,
+                "Query Failed",
+                f"Failed to query cloud storage:\n\n{error_msg}"
+            )
+            return
+
+        if not summary:
+            QMessageBox.warning(
+                self,
+                "Query Timeout",
+                "Cloud storage query timed out after 30 seconds.\n\nPlease try again."
+            )
+            return
+
+        # Check if any videos found
+        total_count = summary.get("total_count", 0)
+        if total_count == 0:
+            QMessageBox.information(
+                self,
+                "No Cloud Storage",
+                "You have no videos currently stored in cloud.\n\n"
+                "Videos are stored when you upload sessions for analysis."
+            )
+            return
+
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Cloud Storage Management")
+        dialog.setMinimumSize(900, 600)
+
+        layout = QVBoxLayout(dialog)
+
+        # Summary header
+        summary_text = f"**Storage Summary (queried from APIs):**\n\n"
+        summary_text += f"• Hume AI: {summary['hume_ai']['count']} jobs\n"
+        summary_text += f"• Memories.ai: {summary['memories_ai']['count']} videos\n"
+        summary_text += f"• Total: {total_count} items\n\n"
+        summary_text += "*Note: Hume AI jobs auto-expire after 30 days (no delete API)*"
+
+        if summary.get("error"):
+            summary_text += f"\n\n**Warning:** {summary['error']}"
+
+        summary_label = QLabel(summary_text)
+        summary_label.setStyleSheet("font-size: 13px; padding: 10px; background-color: #ecf0f1; border-radius: 4px;")
+        summary_label.setWordWrap(True)
+        layout.addWidget(summary_label)
+
+        # Build unified list combining Hume AI jobs and Memories.ai videos
+        storage_items = []
+
+        # Add Hume AI jobs
+        for job in summary['hume_ai'].get('jobs', []):
+            storage_items.append({
+                "provider": "hume_ai",
+                "id": job.get("id"),
+                "name": f"Job {job.get('id', 'Unknown')[:12]}...",
+                "status": job.get("status", "UNKNOWN"),
+                "created_timestamp_ms": job.get("created_timestamp_ms"),
+                "session_id": None,  # Will try to match with database
+                "raw_data": job
+            })
+
+        # Add Memories.ai videos
+        for video in summary['memories_ai'].get('videos', []):
+            storage_items.append({
+                "provider": "memories_ai",
+                "id": video.get("video_no"),
+                "name": video.get("video_name", "Unknown"),
+                "status": video.get("status", "UNKNOWN"),
+                "created_timestamp_ms": int(video.get("create_time", 0)),
+                "session_id": video.get("focus_guardian_session_id"),  # Added by get_storage_summary
+                "unique_id": f"focus_session_{video.get('focus_guardian_session_id')}" if video.get('focus_guardian_session_id') else None,
+                "raw_data": video
+            })
+
+        # Table widget
+        table = QTableWidget()
+        table.setColumnCount(6)
+        table.setHorizontalHeaderLabels(["Select", "Provider", "ID/Name", "Status", "Session", "Age (days)"])
+        table.setRowCount(len(storage_items))
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        # Populate table
+        from datetime import datetime
+        for row, item in enumerate(storage_items):
+            # Checkbox
+            checkbox_item = QTableWidgetItem()
+            checkbox_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            checkbox_item.setCheckState(Qt.CheckState.Unchecked)
+            table.setItem(row, 0, checkbox_item)
+
+            # Provider
+            provider_name = "Hume AI" if item["provider"] == "hume_ai" else "Memories.ai"
+            table.setItem(row, 1, QTableWidgetItem(provider_name))
+
+            # ID/Name
+            table.setItem(row, 2, QTableWidgetItem(item["name"]))
+
+            # Status
+            table.setItem(row, 3, QTableWidgetItem(item["status"]))
+
+            # Session (try to match with database)
+            session_name = "Unknown"
+            if item["session_id"]:
+                session = self.database.get_session(item["session_id"])
+                if session:
+                    session_name = session.task_name
+            table.setItem(row, 4, QTableWidgetItem(session_name))
+
+            # Age (days)
+            if item["created_timestamp_ms"]:
+                created_dt = datetime.fromtimestamp(item["created_timestamp_ms"] / 1000.0)
+                age_days = (datetime.now() - created_dt).days
+                table.setItem(row, 5, QTableWidgetItem(str(age_days)))
+            else:
+                table.setItem(row, 5, QTableWidgetItem("Unknown"))
+
+        # Adjust column widths
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+
+        layout.addWidget(table)
+
+        # Action buttons row
+        action_layout = QHBoxLayout()
+
+        # Select All button
+        select_all_btn = QPushButton("Select All")
+        select_all_btn.clicked.connect(lambda: self._toggle_all_checkboxes(table, True))
+        action_layout.addWidget(select_all_btn)
+
+        # Deselect All button
+        deselect_all_btn = QPushButton("Deselect All")
+        deselect_all_btn.clicked.connect(lambda: self._toggle_all_checkboxes(table, False))
+        action_layout.addWidget(deselect_all_btn)
+
+        action_layout.addStretch()
+
+        # Delete Selected button
+        delete_btn = QPushButton("Delete Selected from Cloud")
+        delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        delete_btn.clicked.connect(lambda: self._delete_selected_cloud_videos(table, storage_items, dialog))
+        action_layout.addWidget(delete_btn)
+
+        layout.addLayout(action_layout)
+
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        dialog.exec()
+
+    def _toggle_all_checkboxes(self, table: 'QTableWidget', checked: bool):
+        """Toggle all checkboxes in table."""
+        for row in range(table.rowCount()):
+            checkbox_item = table.item(row, 0)
+            if checkbox_item:
+                checkbox_item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+
+    def _delete_selected_cloud_videos(self, table: 'QTableWidget', storage_items: list, dialog: 'QDialog'):
+        """
+        Delete selected cloud videos from remote storage using APIs.
+
+        Args:
+            table: QTableWidget containing storage item checkboxes
+            storage_items: List of storage item dicts (from API queries)
+            dialog: Parent dialog to close after deletion
+        """
+        import threading
+        import time
+        from PyQt6.QtWidgets import QProgressDialog
+
+        # Get list of selected items
+        selected_items = []
+        for row in range(table.rowCount()):
+            checkbox_item = table.item(row, 0)
+            if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Checked:
+                if row < len(storage_items):
+                    selected_items.append(storage_items[row])
+
+        if not selected_items:
+            QMessageBox.warning(
+                dialog,
+                "No Items Selected",
+                "Please select at least one item to delete."
+            )
+            return
+
+        # Count by provider
+        hume_count = sum(1 for item in selected_items if item["provider"] == "hume_ai")
+        memories_count = sum(1 for item in selected_items if item["provider"] == "memories_ai")
+
+        # Check for Hume AI selections (cannot delete)
+        if hume_count > 0:
+            QMessageBox.warning(
+                dialog,
+                "Hume AI Jobs Cannot Be Deleted",
+                f"You selected {hume_count} Hume AI job(s).\n\n"
+                "Hume AI does not provide a delete API.\n"
+                "Jobs auto-expire after 30 days.\n\n"
+                "Only Memories.ai videos can be deleted."
+            )
+            # Continue with only Memories.ai items
+            selected_items = [item for item in selected_items if item["provider"] == "memories_ai"]
+            if not selected_items:
+                return
+
+        # Show confirmation dialog
+        confirm = QMessageBox.question(
+            dialog,
+            "Confirm Deletion",
+            f"Delete {len(selected_items)} Memories.ai video(s) from cloud storage?\n\n"
+            "This action cannot be undone. Videos will be permanently removed.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        # Create progress dialog
+        progress = QProgressDialog(
+            "Deleting videos from Memories.ai...",
+            "Cancel",
+            0,
+            len(selected_items),
+            dialog
+        )
+        progress.setWindowTitle("Deleting Cloud Videos")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        progress.show()
+
+        # Track deletion results
+        deletion_results = {
+            "success": [],
+            "failed": []
+        }
+
+        def deletion_worker():
+            """Background thread for cloud video deletion."""
+            try:
+                for idx, item in enumerate(selected_items):
+                    # Check if cancelled
+                    if progress.wasCanceled():
+                        logger.info("Cloud video deletion cancelled by user")
+                        break
+
+                    # Update progress
+                    progress.setLabelText(
+                        f"Deleting {idx + 1}/{len(selected_items)}: {item['name']}..."
+                    )
+                    progress.setValue(idx)
+
+                    try:
+                        # Delete using Memories.ai client
+                        video_no = item["id"]
+                        unique_id = item.get("unique_id", "default")
+
+                        success = self.session_manager.cloud_analysis_manager.memories_client.delete_video(
+                            video_no=video_no,
+                            unique_id=unique_id
+                        )
+
+                        if success:
+                            deletion_results["success"].append(item["name"])
+                            logger.info(f"Successfully deleted Memories.ai video: {video_no}")
+                        else:
+                            deletion_results["failed"].append((item["name"], "API returned failure"))
+
+                        # Add delay to avoid rate limits (3 seconds between deletions)
+                        if idx < len(selected_items) - 1:
+                            time.sleep(3)
+
+                    except Exception as e:
+                        logger.error(f"Failed to delete video {item['name']}: {e}", exc_info=True)
+                        deletion_results["failed"].append((item["name"], str(e)))
+
+                # Update progress to complete
+                progress.setValue(len(selected_items))
+
+            except Exception as e:
+                logger.error(f"Cloud video deletion worker error: {e}", exc_info=True)
+
+            finally:
+                # Close progress dialog and show results
+                def on_deletion_complete():
+                    progress.close()
+
+                    # Show results summary
+                    success_count = len(deletion_results["success"])
+                    failed_count = len(deletion_results["failed"])
+
+                    if failed_count == 0:
+                        QMessageBox.information(
+                            dialog,
+                            "Deletion Complete",
+                            f"Successfully deleted {success_count} video(s) from Memories.ai cloud storage."
+                        )
+                    else:
+                        error_details = "\n".join([
+                            f"• {name}: {error}"
+                            for name, error in deletion_results["failed"]
+                        ])
+                        QMessageBox.warning(
+                            dialog,
+                            "Deletion Partially Complete",
+                            f"Successfully deleted: {success_count} video(s)\n"
+                            f"Failed to delete: {failed_count} video(s)\n\n"
+                            f"Errors:\n{error_details}"
+                        )
+
+                    # Close and reopen dialog to refresh the table with new API query
+                    dialog.close()
+                    self._on_manage_cloud_storage()
+
+                # Schedule UI update on main thread
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, on_deletion_complete)
+
+        # Start deletion in background thread
+        thread = threading.Thread(target=deletion_worker, daemon=True)
+        thread.start()
+
+    def _on_upload_to_cloud(self, session_id: str):
+        """Upload session videos to cloud for analysis."""
+        from pathlib import Path
+        import threading
+
+        # Check if cloud features enabled
+        if not self.config.is_cloud_features_enabled():
+            QMessageBox.critical(
+                self,
+                "Cloud Features Disabled",
+                "Cloud analysis features are not enabled.\n\n"
+                "Please enable them in Settings tab."
+            )
+            return
+
+        # Check which providers are enabled
+        run_hume = self.config.is_hume_ai_enabled()
+        run_memories = self.config.is_memories_ai_enabled()
+
+        if not run_hume and not run_memories:
+            QMessageBox.critical(
+                self,
+                "No Providers Enabled",
+                "No cloud analysis providers are enabled.\n\n"
+                "Please enable Hume AI or Memories.ai in Settings tab."
+            )
+            return
+
+        # Get session from database
+        session = self.database.get_session(session_id)
+        if not session:
+            QMessageBox.critical(self, "Error", "Session not found in database")
+            return
+
+        # Check video files exist
+        data_dir = self.config.get_data_dir()
+        cam_video = data_dir / session.cam_mp4_path
+        screen_video = data_dir / session.screen_mp4_path if session.screen_mp4_path else None
+
+        if not cam_video.exists():
+            QMessageBox.critical(
+                self,
+                "Video Not Found",
+                f"Webcam video not found:\n{cam_video}\n\n"
+                "The session video files may have been deleted."
+            )
+            return
+
+        # Check for duplicate uploads (CRITICAL: Prevent creating duplicate jobs)
+        # First check if there's already an active upload for this session
+        if session_id in self.active_uploads:
+            QMessageBox.warning(
+                self,
+                "Upload Already In Progress",
+                f"Upload already in progress for this session.\n\n"
+                f"Please wait for the current upload to complete before retrying.\n\n"
+                f"Check the Reports tab to see upload status."
+            )
+            return
+
+        # Also check database for already-created jobs
+        from ..core.models import CloudJobStatus, CloudProvider
+        cloud_jobs = self.database.get_cloud_jobs_for_session(session_id)
+
+        # Check if there are already active jobs for the enabled providers
+        active_statuses = {CloudJobStatus.PENDING, CloudJobStatus.UPLOADING, CloudJobStatus.PROCESSING}
+        duplicate_providers = []
+
+        for job in cloud_jobs:
+            if job.status in active_statuses:
+                # Check if this job's provider matches one we're trying to upload to
+                if run_hume and job.provider == CloudProvider.HUME_AI:
+                    duplicate_providers.append("Hume AI")
+                if run_memories and job.provider == CloudProvider.MEMORIES_AI:
+                    duplicate_providers.append("Memories.ai")
+
+        if duplicate_providers:
+            # Duplicate upload detected - show warning and abort
+            providers_str = " and ".join(duplicate_providers)
+            QMessageBox.warning(
+                self,
+                "Upload Already In Progress",
+                f"Upload already in progress for:\n\n" +
+                "\n".join(f"  • {p}" for p in duplicate_providers) +
+                f"\n\nPlease wait for the current upload to complete before retrying.\n\n"
+                f"Check the Reports tab to see upload status."
+            )
+            return
+
+        # Build provider list
+        providers = []
+        if run_hume:
+            providers.append("Hume AI (emotion analysis)")
+        if run_memories:
+            providers.append("Memories.ai (pattern analysis)")
+
+        # Calculate estimated cost
+        cost_estimate = self._calculate_cloud_cost(session, run_hume, run_memories)
+
+        # Show confirmation dialog
+        reply = QMessageBox.question(
+            self,
+            "Upload to Cloud",
+            f"Upload session videos to:\n\n" +
+            "\n".join(f"  • {p}" for p in providers) +
+            f"\n\nEstimated cost: {cost_estimate}\n\nProceed?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Show status bar message (non-blocking)
+        providers_list = []
+        if run_hume:
+            providers_list.append("Hume AI")
+        if run_memories:
+            providers_list.append("Memories.ai")
+        providers_str = " and ".join(providers_list)
+        self.status_bar.showMessage(f"Uploading to {providers_str}...")
+
+        # Track upload
+        if session_id not in self.active_uploads:
+            self.active_uploads[session_id] = []
+
+        # Create progress dialog (non-modal so user can still interact with app)
+        from PyQt6.QtWidgets import QProgressDialog
+        progress_dialog = QProgressDialog(
+            f"Uploading session videos to {providers_str}...\n\nThis may take 10-30 seconds depending on file size.",
+            "Cancel",
+            0,
+            0,  # 0,0 = indeterminate progress
+            self
+        )
+        progress_dialog.setWindowTitle("Cloud Upload In Progress")
+        progress_dialog.setWindowModality(Qt.WindowModality.NonModal)  # Non-modal: user can still use app
+        progress_dialog.setMinimumDuration(0)  # Show immediately
+        progress_dialog.setCancelButton(None)  # No cancel button (upload cannot be cancelled mid-flight)
+        progress_dialog.show()
+
+        # Run upload in background thread
+        def upload_worker():
+            try:
+                logger.info(f"Starting cloud upload for session {session_id}")
+
+                # Upload to cloud
+                hume_job_id, memories_job_id = self.session_manager.cloud_analysis_manager.upload_session_for_analysis(
+                    session_id=session_id,
+                    cam_video_path=cam_video,
+                    screen_video_path=screen_video,
+                    run_hume=run_hume,
+                    run_memories=run_memories
+                )
+
+                # Track job IDs
+                job_ids = []
+                if hume_job_id:
+                    job_ids.append(hume_job_id)
+                if memories_job_id:
+                    job_ids.append(memories_job_id)
+
+                logger.info(f"Cloud upload completed: hume={hume_job_id}, memories={memories_job_id}")
+
+                # Schedule UI updates on main thread (CRITICAL: Never modify Qt widgets from background thread!)
+                def on_upload_complete():
+                    # CRITICAL: Remove from active uploads FIRST (before showing dialogs)
+                    if session_id in self.active_uploads:
+                        del self.active_uploads[session_id]
+
+                    # Close progress dialog
+                    progress_dialog.close()
+
+                    # Update status bar
+                    self.status_bar.showMessage("✓ Upload completed - processing started", 10000)  # Show for 10 seconds
+
+                    # Reload sessions list to show new cloud jobs
+                    self._load_sessions_list()
+
+                    # Show success notification after dialog closes (delayed to allow event loop to process close)
+                    def show_success_message():
+                        success_msg = "<div style='color: #2c3e50;'><h3 style='color: #27ae60;'>✓ Upload Successful!</h3>"
+                        if hume_job_id:
+                            success_msg += "<p><b>• Hume AI:</b> Processing started</p>"
+                        if memories_job_id:
+                            success_msg += "<p><b>• Memories.ai:</b> Processing started</p>"
+                        success_msg += "<hr><p><b>Processing time:</b> 5-10 minutes</p>"
+                        success_msg += "<p>Check back using the 'Check Status' button in the Reports tab.</p></div>"
+
+                        msg_box = QMessageBox(self)
+                        msg_box.setWindowTitle("Upload Complete")
+                        msg_box.setText(success_msg)
+                        msg_box.setIcon(QMessageBox.Icon.Information)
+                        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+                        msg_box.setTextFormat(Qt.TextFormat.RichText)
+                        msg_box.exec()
+
+                    QTimer.singleShot(100, show_success_message)  # 100ms delay ensures progress dialog closes first
+
+                QTimer.singleShot(0, on_upload_complete)
+
+            except Exception as e:
+                logger.error(f"Upload failed: {e}", exc_info=True)
+
+                # Schedule error handling on main thread (CRITICAL: Never modify Qt widgets from background thread!)
+                def on_upload_error():
+                    # CRITICAL: Remove from active uploads FIRST (before showing dialogs)
+                    if session_id in self.active_uploads:
+                        del self.active_uploads[session_id]
+
+                    # Close progress dialog
+                    progress_dialog.close()
+
+                    # Update status bar
+                    self.status_bar.showMessage("✗ Upload failed", 10000)
+
+                    # Show error message after dialog closes (delayed to allow event loop to process close)
+                    def show_error_message():
+                        QMessageBox.critical(
+                            self,
+                            "Upload Failed",
+                            f"Failed to upload videos to cloud:\n\n{str(e)}\n\n"
+                            "Check your internet connection and API keys."
+                        )
+
+                    QTimer.singleShot(100, show_error_message)  # 100ms delay ensures progress dialog closes first
+
+                QTimer.singleShot(0, on_upload_error)
+
+        thread = threading.Thread(target=upload_worker, daemon=True)
+        thread.start()
+
+    def _auto_upload_session(self, session_id: str, run_hume: bool, run_memories: bool):
+        """
+        Auto-upload session videos to cloud after session ends.
+        Shows status bar messages (non-blocking) and session summary after completion.
+
+        Args:
+            session_id: Session to upload
+            run_hume: Whether to upload to Hume AI
+            run_memories: Whether to upload to Memories.ai
+        """
+        from pathlib import Path
+        import threading
+
+        logger.info(f"Auto-uploading session {session_id}: hume={run_hume}, memories={run_memories}")
+
+        # Get session from database
+        session = self.database.get_session(session_id)
+        if not session:
+            logger.error("Session not found in database for auto-upload")
+            self._show_session_summary(session_id)
+            return
+
+        # Check video files exist
+        data_dir = self.config.get_data_dir()
+        cam_video = data_dir / session.cam_mp4_path
+        screen_video = data_dir / session.screen_mp4_path if session.screen_mp4_path else None
+
+        if not cam_video.exists():
+            logger.error(f"Webcam video not found for auto-upload: {cam_video}")
+            QMessageBox.warning(
+                self,
+                "Auto-Upload Failed",
+                f"Webcam video not found:\n{cam_video}\n\n"
+                "Skipping cloud upload."
+            )
+            self._show_session_summary(session_id)
+            return
+
+        # Show status bar message (non-blocking)
+        providers_list = []
+        if run_hume:
+            providers_list.append("Hume AI")
+        if run_memories:
+            providers_list.append("Memories.ai")
+        providers_str = " and ".join(providers_list)
+        self.status_bar.showMessage(f"Auto-uploading to {providers_str}...", 5000)
+
+        # Track auto-upload in active_uploads (enables quit warning)
+        if session_id not in self.active_uploads:
+            self.active_uploads[session_id] = []
+
+        # Run upload in background thread
+        def upload_worker():
+            try:
+                logger.info(f"Starting auto-upload for session {session_id}")
+
+                # Upload to cloud
+                hume_job_id, memories_job_id = self.session_manager.cloud_analysis_manager.upload_session_for_analysis(
+                    session_id=session_id,
+                    cam_video_path=cam_video,
+                    screen_video_path=screen_video,
+                    run_hume=run_hume,
+                    run_memories=run_memories
+                )
+
+                # Track job IDs
+                job_ids = []
+                if hume_job_id:
+                    job_ids.append(hume_job_id)
+                if memories_job_id:
+                    job_ids.append(memories_job_id)
+
+                logger.info(f"Auto-upload completed: hume={hume_job_id}, memories={memories_job_id}")
+
+                # Schedule UI updates on main thread (CRITICAL: Never modify Qt widgets from background thread!)
+                def on_upload_complete():
+                    # CRITICAL: Remove from active uploads FIRST (before showing dialogs)
+                    if session_id in self.active_uploads:
+                        del self.active_uploads[session_id]
+
+                    # Update status bar
+                    self.status_bar.showMessage("✓ Auto-upload completed - processing started", 10000)
+
+                    # Reload sessions list to show new cloud jobs
+                    self._load_sessions_list()
+
+                    # Show session summary with upload status
+                    self._show_session_summary(session_id, auto_upload_success=True)
+
+                QTimer.singleShot(0, on_upload_complete)
+
+            except Exception as e:
+                logger.error(f"Auto-upload failed: {e}", exc_info=True)
+                upload_error = str(e)
+
+                # Schedule error handling on main thread (CRITICAL: Never modify Qt widgets from background thread!)
+                def on_upload_error():
+                    # CRITICAL: Remove from active uploads FIRST (before showing dialogs)
+                    if session_id in self.active_uploads:
+                        del self.active_uploads[session_id]
+
+                    # Update status bar
+                    self.status_bar.showMessage("✗ Auto-upload failed", 10000)
+
+                    # Show error message
+                    QMessageBox.critical(
+                        self,
+                        "Auto-Upload Failed",
+                        f"Failed to auto-upload videos to cloud:\n\n{str(e)}\n\n"
+                        "You can retry manually from the Reports tab."
+                    )
+
+                    # Show session summary with failure status
+                    self._show_session_summary(session_id, auto_upload_success=False, auto_upload_error=upload_error)
+
+                QTimer.singleShot(0, on_upload_error)
+
+        thread = threading.Thread(target=upload_worker, daemon=True)
+        thread.start()
+
+    def _on_show_files(self, session_id: str):
+        """Open session folder in system file manager."""
+        import subprocess
+        import platform
+        from pathlib import Path
+
+        # Get session from database
+        session = self.database.get_session(session_id)
+        if not session:
+            QMessageBox.critical(self, "Error", "Session not found in database")
+            return
+
+        # Get session folder path
+        data_dir = self.config.get_data_dir()
+        session_folder = data_dir / f"sessions/{session_id}"
+
+        if not session_folder.exists():
+            QMessageBox.warning(
+                self,
+                "Folder Not Found",
+                f"Session folder not found:\n{session_folder}\n\n"
+                "The session files may have been deleted."
+            )
+            return
+
+        # Open folder in system file manager
+        try:
+            system = platform.system()
+            if system == "Darwin":  # macOS
+                subprocess.run(["open", str(session_folder)])
+            elif system == "Windows":
+                subprocess.run(["explorer", str(session_folder)])
+            else:  # Linux
+                subprocess.run(["xdg-open", str(session_folder)])
+
+            logger.info(f"Opened session folder: {session_folder}")
+
+        except Exception as e:
+            logger.error(f"Failed to open folder: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open session folder:\n\n{str(e)}"
+            )
+
+    def _on_delete_session(self, session_id: str):
+        """Delete session with user confirmation."""
+        from PyQt6.QtWidgets import QRadioButton, QDialog, QDialogButtonBox, QVBoxLayout, QLabel, QButtonGroup
+        from pathlib import Path
+        import shutil
+
+        # Get session from database
+        session = self.database.get_session(session_id)
+        if not session:
+            QMessageBox.critical(self, "Error", "Session not found in database")
+            return
+
+        # Check if cloud jobs are processing
+        cloud_jobs = self.database.get_cloud_jobs_for_session(session_id)
+        processing_jobs = [j for j in cloud_jobs if j.status.value == "processing"]
+        if processing_jobs:
+            reply = QMessageBox.warning(
+                self,
+                "Cloud Jobs Processing",
+                f"{len(processing_jobs)} cloud job(s) are still processing.\n\n"
+                "If you delete this session, you may lose the cloud analysis results.\n\n"
+                "Continue anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        # Calculate folder size
+        data_dir = self.config.get_data_dir()
+        session_folder = data_dir / f"sessions/{session_id}"
+        folder_size_mb = 0
+        if session_folder.exists():
+            folder_size_mb = sum(f.stat().st_size for f in session_folder.rglob('*') if f.is_file()) / (1024 * 1024)
+
+        # Create custom dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Delete Session")
+        dialog.setMinimumWidth(400)
+
+        layout = QVBoxLayout(dialog)
+
+        # Header
+        header = QLabel(f"<b>Delete session \"{session.task_name}\"?</b>")
+        header.setStyleSheet("font-size: 14px; margin-bottom: 10px;")
+        layout.addWidget(header)
+
+        # Session info
+        duration = self._format_duration(session)
+        info = QLabel(
+            f"Date: {session.started_at.strftime('%Y-%m-%d %H:%M')}\n"
+            f"Duration: {duration}\n"
+            f"Files: {folder_size_mb:.1f} MB"
+        )
+        info.setStyleSheet("color: #7f8c8d; margin-bottom: 15px;")
+        layout.addWidget(info)
+
+        # Radio buttons for deletion options
+        button_group = QButtonGroup(dialog)
+
+        record_only_radio = QRadioButton("Delete record only (keep video files)")
+        record_only_radio.setStyleSheet("margin-bottom: 5px;")
+        button_group.addButton(record_only_radio, 1)
+        layout.addWidget(record_only_radio)
+
+        delete_all_radio = QRadioButton("Delete record + all files (cam.mp4, screen.mp4, snapshots)")
+        delete_all_radio.setStyleSheet("margin-bottom: 15px;")
+        delete_all_radio.setChecked(True)  # Default to delete all
+        button_group.addButton(delete_all_radio, 2)
+        layout.addWidget(delete_all_radio)
+
+        # Warning
+        warning = QLabel("⚠️ This action cannot be undone!")
+        warning.setStyleSheet("color: #e74c3c; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(warning)
+
+        # Buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok
+        )
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Delete")
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                padding: 6px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        # Show dialog
+        result = dialog.exec()
+
+        if result != QDialog.DialogCode.Accepted:
+            return
+
+        # Get selected option
+        delete_files = (button_group.checkedId() == 2)
+
+        # Perform deletion
+        try:
+            # Delete from database
+            self.database.delete_session(session_id)
+            logger.info(f"Deleted session {session_id} from database")
+
+            # Delete files if requested
+            if delete_files and session_folder.exists():
+                shutil.rmtree(session_folder)
+                logger.info(f"Deleted session folder: {session_folder}")
+
+            # Reload sessions list
+            self._load_sessions_list()
+
+            # Show success message
+            msg = "Session deleted successfully!"
+            if delete_files:
+                msg += f"\n\nFreed {folder_size_mb:.1f} MB of disk space."
+            else:
+                msg += f"\n\nVideo files kept in:\n{session_folder}"
+
+            QMessageBox.information(self, "Session Deleted", msg)
+
+        except Exception as e:
+            logger.error(f"Failed to delete session: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Delete Failed",
+                f"Failed to delete session:\n\n{str(e)}"
+            )
+
+    def _load_sessions_list(self):
+        """Load all sessions from database and display in Reports tab."""
+        from ..core.models import CloudJobStatus
+
+        # Clear existing session cards
+        while self.sessions_layout.count():
+            item = self.sessions_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Get all sessions from database (most recent first)
+        sessions = self.database.get_all_sessions(limit=50)
+
+        if not sessions:
+            placeholder = QLabel("No sessions found. Complete a focus session to see reports here.")
+            placeholder.setStyleSheet("color: #7f8c8d; font-size: 14px; padding: 20px;")
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.sessions_layout.addWidget(placeholder)
+            return
+
+        # Create card for each session
+        for session in sessions:
+            # Get cloud jobs for this session
+            cloud_jobs = self.database.get_cloud_jobs_for_session(session.session_id)
+
+            # Create session card
+            card = self._create_session_card(session, cloud_jobs)
+            self.sessions_layout.addWidget(card)
+
+    def _create_session_card(self, session, cloud_jobs):
+        """
+        Create a card widget for a session.
+
+        Args:
+            session: Session object
+            cloud_jobs: List of CloudAnalysisJob objects for this session
+        """
+        from PyQt6.QtWidgets import QFrame, QGridLayout
+        from ..core.models import CloudJobStatus, CloudProvider
+
+        card = QFrame()
+        card.setFrameShape(QFrame.Shape.Box)
+        card.setStyleSheet("""
+            QFrame {
+                border: 1px solid #bdc3c7;
+                border-radius: 8px;
+                background-color: #ecf0f1;
+                padding: 15px;
+            }
+        """)
+
+        layout = QGridLayout(card)
+
+        # Session info
+        row = 0
+        task_label = QLabel(f"<b>{session.task_name}</b>")
+        task_label.setStyleSheet("font-size: 16px; color: #2c3e50;")
+        layout.addWidget(task_label, row, 0, 1, 2)
+
+        row += 1
+        date_label = QLabel(f"Date: {session.started_at.strftime('%Y-%m-%d %H:%M')}")
+        date_label.setStyleSheet("color: #2c3e50; font-size: 13px;")
+        layout.addWidget(date_label, row, 0)
+
+        duration_label = QLabel(f"Duration: {self._format_duration(session)}")
+        duration_label.setStyleSheet("color: #2c3e50; font-size: 13px;")
+        layout.addWidget(duration_label, row, 1)
+
+        # Cloud analysis section
+        row += 1
+
+        if not cloud_jobs:
+            # No cloud jobs - show upload button if session is complete
+            if session.ended_at:
+                # Check if upload is in progress for this session
+                is_uploading = session.session_id in self.active_uploads
+
+                upload_btn = QPushButton("Uploading..." if is_uploading else "Upload to Cloud for Analysis")
+                upload_btn.setEnabled(not is_uploading)  # Disable if uploading
+                upload_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #9b59b6;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 8px 12px;
+                        font-size: 13px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #8e44ad;
+                    }
+                    QPushButton:disabled {
+                        background-color: #95a5a6;
+                        color: #ecf0f1;
+                    }
+                """)
+                upload_btn.clicked.connect(lambda: self._on_upload_to_cloud(session.session_id))
+                layout.addWidget(upload_btn, row, 0, 1, 2)
+                row += 1
+        else:
+            # Has cloud jobs - show status for each
+            for job in cloud_jobs:
+                status_label = QLabel(f"{job.provider.value}: {self._get_status_badge(job.status)}")
+                status_label.setStyleSheet("color: #2c3e50; font-size: 13px;")
+                layout.addWidget(status_label, row, 0)
+
+                # Only show check status button for PROCESSING jobs
+                if job.status == CloudJobStatus.PROCESSING:
+                    # Check if this job is currently being refreshed
+                    is_refreshing = job.job_id in self.active_refresh_jobs
+
+                    refresh_btn = QPushButton("Checking..." if is_refreshing else "Check Status")
+                    refresh_btn.setEnabled(not is_refreshing)  # Disable if refreshing
+                    refresh_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #3498db;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            padding: 4px 12px;
+                            font-size: 12px;
+                        }
+                        QPushButton:hover {
+                            background-color: #2980b9;
+                        }
+                        QPushButton:disabled {
+                            background-color: #95a5a6;
+                            color: #ecf0f1;
+                        }
+                    """)
+                    refresh_btn.clicked.connect(lambda checked, jid=job.job_id: self._on_refresh_job(jid))
+                    layout.addWidget(refresh_btn, row, 1)
+
+                # Show retry button for FAILED jobs
+                elif job.status == CloudJobStatus.FAILED:
+                    # Check if upload is in progress for this session
+                    is_uploading = session.session_id in self.active_uploads
+
+                    retry_btn = QPushButton("Uploading..." if is_uploading else "Retry Upload")
+                    retry_btn.setEnabled(not is_uploading)  # Disable if uploading
+                    retry_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #e67e22;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            padding: 4px 12px;
+                            font-size: 12px;
+                        }
+                        QPushButton:hover {
+                            background-color: #d35400;
+                        }
+                        QPushButton:disabled {
+                            background-color: #95a5a6;
+                            color: #ecf0f1;
+                        }
+                    """)
+                    retry_btn.clicked.connect(lambda checked, sid=session.session_id: self._on_upload_to_cloud(sid))
+                    layout.addWidget(retry_btn, row, 1)
+
+                # Show details button for COMPLETED jobs
+                elif job.status == CloudJobStatus.COMPLETED:
+                    details_btn = QPushButton("Show Details")
+                    details_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #27ae60;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            padding: 4px 12px;
+                            font-size: 12px;
+                        }
+                        QPushButton:hover {
+                            background-color: #229954;
+                        }
+                    """)
+                    details_btn.clicked.connect(lambda checked, jid=job.job_id: self._on_show_cloud_details(jid))
+                    layout.addWidget(details_btn, row, 1)
+
+                row += 1
+
+        # Action buttons row
+        row += 1
+        action_layout = QHBoxLayout()
+
+        # Show Files button
+        show_files_btn = QPushButton("📁 Show Files")
+        show_files_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        show_files_btn.clicked.connect(lambda: self._on_show_files(session.session_id))
+        action_layout.addWidget(show_files_btn)
+
+        # Delete Session button
+        delete_btn = QPushButton("🗑️ Delete Session")
+        delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        delete_btn.clicked.connect(lambda: self._on_delete_session(session.session_id))
+        action_layout.addWidget(delete_btn)
+
+        action_layout.addStretch()
+
+        # Add action layout to grid (span 2 columns)
+        layout.addLayout(action_layout, row, 0, 1, 2)
+
+        return card
+
+    def _format_duration(self, session) -> str:
+        """Format session duration."""
+        if not session.ended_at:
+            return "In progress"
+
+        duration = session.ended_at - session.started_at
+        minutes = int(duration.total_seconds() / 60)
+        return f"{minutes} min"
+
+    def _calculate_cloud_cost(self, session, run_hume: bool, run_memories: bool) -> str:
+        """
+        Calculate estimated cloud analysis cost based on session duration.
+
+        Args:
+            session: Session object
+            run_hume: Whether Hume AI will be used
+            run_memories: Whether Memories.ai will be used
+
+        Returns:
+            Cost estimate string (e.g., "$1.50-$3.00")
+        """
+        if not session.ended_at:
+            return "~$0.50+"  # In-progress session
+
+        # Calculate duration in minutes
+        duration = session.ended_at - session.started_at
+        minutes = duration.total_seconds() / 60
+
+        # Pricing per minute (estimated)
+        HUME_COST_PER_MIN = 0.20
+        MEMORIES_COST_PER_MIN = 0.40
+        MINIMUM_COST = 0.50
+
+        # Calculate base costs
+        hume_cost = (minutes * HUME_COST_PER_MIN) if run_hume else 0
+        memories_cost = (minutes * MEMORIES_COST_PER_MIN) if run_memories else 0
+        total_cost = hume_cost + memories_cost
+
+        # Apply minimum
+        total_cost = max(total_cost, MINIMUM_COST)
+
+        # Format cost string
+        if minutes < 2:
+            # Very short session - show flat minimum
+            return f"~${MINIMUM_COST:.2f}"
+        elif minutes < 5:
+            # Short session - show approximate cost
+            return f"~${total_cost:.2f}"
+        else:
+            # Longer session - show range (±20%)
+            low_estimate = total_cost * 0.8
+            high_estimate = total_cost * 1.2
+            return f"${low_estimate:.2f}-${high_estimate:.2f}"
+
+    def _get_status_badge(self, status) -> str:
+        """Get HTML status badge."""
+        from ..core.models import CloudJobStatus
+
+        colors = {
+            CloudJobStatus.PENDING: "#95a5a6",
+            CloudJobStatus.UPLOADING: "#f39c12",
+            CloudJobStatus.PROCESSING: "#3498db",
+            CloudJobStatus.COMPLETED: "#27ae60",
+            CloudJobStatus.FAILED: "#e74c3c"
+        }
+
+        color = colors.get(status, "#95a5a6")
+        return f'<span style="color: {color}; font-weight: bold;">{status.value.upper()}</span>'
+
+    def _on_refresh_all_sessions(self):
+        """Refresh all sessions with processing cloud jobs."""
+        logger.info("Refreshing all cloud analysis jobs...")
+        # TODO: Implement refresh all logic
+        self._load_sessions_list()
+
+    def _on_refresh_job(self, job_id: str):
+        """
+        Refresh a specific cloud analysis job.
+
+        Polls the cloud provider to check if processing is complete.
+        If complete, retrieves results and deletes cloud videos.
+        """
+        import threading
+        from ..core.models import CloudJobStatus
+
+        logger.info(f"Refreshing cloud job: {job_id}")
+
+        # Check if this job is already being refreshed
+        if job_id in self.active_refresh_jobs:
+            logger.warning(f"Job {job_id} is already being refreshed, skipping duplicate request")
+            return
+
+        # Track active refresh
+        self.active_refresh_jobs.add(job_id)
+
+        # Reload sessions list immediately to show button as disabled
+        self._load_sessions_list()
+
+        # Run in background thread to avoid blocking UI
+        def refresh_worker():
+            try:
+                # Check status
+                if not self.session_manager.cloud_analysis_manager:
+                    logger.error("Cloud analysis manager not available")
+                    return
+
+                status = self.session_manager.cloud_analysis_manager.check_job_status(job_id)
+
+                if status == CloudJobStatus.COMPLETED:
+                    # Retrieve results
+                    results_path = self.session_manager.cloud_analysis_manager.retrieve_and_store_results(job_id)
+
+                    if results_path:
+                        # Delete cloud videos
+                        self.session_manager.cloud_analysis_manager.delete_cloud_videos(job_id)
+
+                        # Notify user
+                        self.ui_queue.put({
+                            "type": "cloud_job_complete",
+                            "job_id": job_id,
+                            "results_path": str(results_path)
+                        })
+                    else:
+                        logger.error(f"Failed to retrieve results for job {job_id}")
+
+                # CRITICAL: Schedule UI update on main thread (CANNOT modify Qt widgets from background thread!)
+                def on_refresh_complete():
+                    # Remove from active refreshes
+                    if job_id in self.active_refresh_jobs:
+                        self.active_refresh_jobs.remove(job_id)
+                    # Reload sessions list to update button state
+                    self._load_sessions_list()
+
+                QTimer.singleShot(0, on_refresh_complete)
+
+            except Exception as e:
+                logger.error(f"Error refreshing job {job_id}: {e}", exc_info=True)
+
+                # Remove from active refreshes even on error
+                def on_refresh_error():
+                    if job_id in self.active_refresh_jobs:
+                        self.active_refresh_jobs.remove(job_id)
+                    self._load_sessions_list()
+
+                QTimer.singleShot(0, on_refresh_error)
+
+        thread = threading.Thread(target=refresh_worker, daemon=True)
+        thread.start()
+
+    def _on_show_cloud_details(self, job_id: str):
+        """
+        Display cloud analysis results for a completed job.
+
+        Args:
+            job_id: Cloud analysis job ID
+        """
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
+        from pathlib import Path
+        import json
+        from ..core.models import CloudProvider
+
+        logger.info(f"Showing cloud details for job: {job_id}")
+
+        try:
+            # Get job from database
+            job = self.database.get_cloud_job(job_id)
+            if not job:
+                QMessageBox.critical(self, "Error", "Cloud job not found in database")
+                return
+
+            # Check if results are available
+            if not job.results_file_path:
+                QMessageBox.warning(
+                    self,
+                    "Results Not Available",
+                    "Cloud analysis results have not been retrieved yet.\n\n"
+                    "Click 'Check Status' to fetch results."
+                )
+                return
+
+            # Read results JSON file
+            results_path = Path(job.results_file_path)
+            if not results_path.exists():
+                QMessageBox.critical(
+                    self,
+                    "Results File Missing",
+                    f"Results file not found:\n{results_path}\n\n"
+                    "The results file may have been deleted."
+                )
+                return
+
+            with open(results_path, 'r') as f:
+                results = json.load(f)
+
+            # Format results based on provider
+            if job.provider == CloudProvider.HUME_AI:
+                title = "Hume AI - Emotion Analysis Results"
+                formatted_text = self._format_hume_results(results)
+            elif job.provider == CloudProvider.MEMORIES_AI:
+                title = "Memories.ai - Pattern Analysis Results"
+                formatted_text = self._format_memories_results(results)
+            else:
+                QMessageBox.critical(self, "Error", f"Unknown provider: {job.provider}")
+                return
+
+            # Create dialog to display results
+            dialog = QDialog(self)
+            dialog.setWindowTitle(title)
+            dialog.setMinimumSize(700, 500)
+
+            layout = QVBoxLayout(dialog)
+
+            # Text display with results
+            text_display = QTextEdit()
+            text_display.setReadOnly(True)
+            text_display.setMarkdown(formatted_text)
+            text_display.setStyleSheet("""
+                QTextEdit {
+                    font-size: 13px;
+                    color: #000000;
+                    background-color: white;
+                    border: 1px solid #bdc3c7;
+                    border-radius: 4px;
+                    padding: 10px;
+                }
+            """)
+            layout.addWidget(text_display)
+
+            # Close button
+            button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            button_box.rejected.connect(dialog.reject)
+            layout.addWidget(button_box)
+
+            dialog.exec()
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse results JSON: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Invalid Results",
+                f"Failed to parse results file:\n\n{str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to show cloud details: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to load cloud analysis results:\n\n{str(e)}"
+            )
+
+    def _calculate_emotion_percentages(self, timeline: list) -> dict:
+        """
+        Calculate percentage of time spent in each emotion state.
+
+        Args:
+            timeline: List of frame dicts with emotions
+
+        Returns:
+            Dict mapping emotion -> percentage (0.0-100.0)
+        """
+        if not timeline:
+            return {}
+
+        # Count frames where each emotion is dominant (highest value)
+        emotion_counts = {}
+        total_frames = len(timeline)
+
+        for frame in timeline:
+            emotions = frame.get("emotions", {})
+            if not emotions:
+                continue
+
+            # Find dominant emotion for this frame
+            dominant_emotion = max(emotions.items(), key=lambda x: x[1])[0]
+            emotion_counts[dominant_emotion] = emotion_counts.get(dominant_emotion, 0) + 1
+
+        # Convert counts to percentages
+        percentages = {
+            emotion: (count / total_frames) * 100
+            for emotion, count in emotion_counts.items()
+        }
+
+        return percentages
+
+    def _identify_primary_emotion(self, emotion_percentages: dict) -> str:
+        """
+        Identify the primary (most frequent) emotion and provide interpretation.
+
+        Args:
+            emotion_percentages: Dict from _calculate_emotion_percentages
+
+        Returns:
+            Human-readable string describing primary emotion and interpretation
+        """
+        if not emotion_percentages:
+            return "No dominant emotion detected"
+
+        # Find emotion with highest percentage
+        primary_emotion, percentage = max(emotion_percentages.items(), key=lambda x: x[1])
+
+        # Emotion interpretations for productivity context
+        interpretations = {
+            "concentration": "high engagement and focus on task",
+            "confusion": "cognitive load or difficulty understanding material",
+            "boredom": "disengagement or lack of challenge",
+            "frustration": "obstacles or technical difficulties",
+            "stress": "time pressure or overwhelming complexity",
+            "tiredness": "fatigue or need for break",
+            "interest": "curiosity and active learning",
+            "determination": "persistence despite challenges",
+            "satisfaction": "accomplishment and progress",
+            "distraction": "wandering attention or external interruptions"
+        }
+
+        interpretation = interpretations.get(primary_emotion.lower(), "emotional state detected")
+
+        return f"**{primary_emotion.title()}** ({percentage:.1f}%) - suggests {interpretation}"
+
+    def _create_emotion_timeline_ascii(self, timeline: list, width: int = 60) -> str:
+        """
+        Create ASCII visualization of emotion timeline.
+
+        Args:
+            timeline: List of frame dicts with emotions
+            width: Character width of timeline (default 60)
+
+        Returns:
+            Multi-line ASCII art string
+        """
+        if not timeline:
+            return "No timeline data available"
+
+        # Get top 3 most frequent emotions
+        emotion_percentages = self._calculate_emotion_percentages(timeline)
+        top_emotions = sorted(emotion_percentages.items(), key=lambda x: x[1], reverse=True)[:3]
+
+        if not top_emotions:
+            return "No emotion data available"
+
+        # Create timeline for each top emotion
+        lines = []
+
+        for emotion, percentage in top_emotions:
+            # Build timeline string
+            timeline_str = emotion.title().ljust(15) + " | "
+
+            # Calculate segments (each char represents ~2% of timeline)
+            segments_per_char = len(timeline) / width
+
+            for i in range(width):
+                # Find frames in this segment
+                start_idx = int(i * segments_per_char)
+                end_idx = int((i + 1) * segments_per_char)
+                segment_frames = timeline[start_idx:end_idx]
+
+                # Check if this emotion is dominant in this segment
+                dominant_count = 0
+                for frame in segment_frames:
+                    emotions = frame.get("emotions", {})
+                    if emotions:
+                        dominant = max(emotions.items(), key=lambda x: x[1])[0]
+                        if dominant == emotion:
+                            dominant_count += 1
+
+                # Use different symbols based on dominance strength
+                if not segment_frames:
+                    timeline_str += " "
+                elif dominant_count / len(segment_frames) > 0.7:
+                    timeline_str += "█"  # Strong presence
+                elif dominant_count / len(segment_frames) > 0.4:
+                    timeline_str += "▓"  # Moderate presence
+                elif dominant_count / len(segment_frames) > 0.2:
+                    timeline_str += "▒"  # Weak presence
+                else:
+                    timeline_str += "░"  # Very weak presence
+
+            timeline_str += f" | {percentage:.1f}%"
+            lines.append(timeline_str)
+
+        # Add time markers
+        time_markers = " " * 15 + " | " + "0%".ljust(width-4) + "100% |"
+        lines.append(time_markers)
+
+        return "\n".join(lines)
+
+    def _analyze_emotion_transitions(self, timeline: list) -> list:
+        """
+        Analyze significant emotion transitions in timeline.
+
+        Args:
+            timeline: List of frame dicts with emotions
+
+        Returns:
+            List of dicts describing significant transitions
+        """
+        if len(timeline) < 2:
+            return []
+
+        transitions = []
+        prev_dominant = None
+        transition_count = 0
+
+        for i, frame in enumerate(timeline):
+            emotions = frame.get("emotions", {})
+            if not emotions:
+                continue
+
+            # Get dominant emotion for this frame
+            dominant = max(emotions.items(), key=lambda x: x[1])[0]
+
+            # Check if dominant emotion changed
+            if prev_dominant and dominant != prev_dominant:
+                # Calculate timestamp (assuming evenly spaced frames)
+                timestamp_sec = (i / len(timeline)) * (timeline[-1].get("timestamp", 0))
+
+                transitions.append({
+                    "from": prev_dominant,
+                    "to": dominant,
+                    "timestamp": timestamp_sec,
+                    "frame_index": i
+                })
+
+                transition_count += 1
+
+            prev_dominant = dominant
+
+        # Calculate transition frequency
+        if timeline:
+            duration_min = timeline[-1].get("timestamp", 0) / 60.0
+            transitions_per_min = transition_count / duration_min if duration_min > 0 else 0
+        else:
+            transitions_per_min = 0
+
+        return {
+            "transitions": transitions[:10],  # Return top 10 transitions
+            "total_count": transition_count,
+            "frequency_per_min": transitions_per_min
+        }
+
+    def _format_hume_results(self, results: dict) -> str:
+        """Format Hume AI results as markdown with comprehensive emotion analytics."""
+        # Extract key metrics
+        job_id = results.get("job_id", "Unknown")
+        frame_count = results.get("frame_count", 0)
+        summary = results.get("summary", {})
+        timeline = results.get("timeline", [])
+
+        # Build formatted text
+        text = f"# Hume AI Emotion Analysis\n\n"
+        text += f"**Job ID:** {job_id}\n\n"
+        text += f"**Frames Analyzed:** {frame_count}\n\n"
+
+        if frame_count == 0:
+            text += "**Note:** No faces detected in video. This typically means the camera was not showing your face during the session.\n\n"
+            text += "See documentation/HUME_VIDEO_REQUIREMENTS.md for details.\n\n"
+            return text
+
+        # Section 1: Emotion Distribution
+        text += "## Emotion Distribution\n\n"
+        emotion_percentages = self._calculate_emotion_percentages(timeline)
+
+        if emotion_percentages:
+            # Show percentages sorted by frequency
+            sorted_emotions = sorted(emotion_percentages.items(), key=lambda x: x[1], reverse=True)
+            for emotion, percentage in sorted_emotions:
+                text += f"- **{emotion.title()}:** {percentage:.1f}%\n"
+            text += "\n"
+
+            # Primary emotion interpretation
+            text += "### Primary Emotion\n\n"
+            primary_text = self._identify_primary_emotion(emotion_percentages)
+            text += f"{primary_text}\n\n"
+
+        # Section 2: Emotion Timeline Visualization
+        text += "## Emotion Timeline\n\n"
+        ascii_timeline = self._create_emotion_timeline_ascii(timeline, width=50)
+        text += "```\n"
+        text += ascii_timeline
+        text += "\n```\n\n"
+        text += "*Legend: █ = strong presence, ▓ = moderate, ▒ = weak, ░ = very weak*\n\n"
+
+        # Section 3: Emotion Transitions
+        text += "## Emotion Transitions\n\n"
+        transition_analysis = self._analyze_emotion_transitions(timeline)
+
+        if transition_analysis:
+            total_transitions = transition_analysis.get("total_count", 0)
+            freq_per_min = transition_analysis.get("frequency_per_min", 0)
+            transitions_list = transition_analysis.get("transitions", [])
+
+            text += f"**Total Transitions:** {total_transitions}\n\n"
+            text += f"**Frequency:** {freq_per_min:.1f} transitions/minute\n\n"
+
+            if transitions_list:
+                text += "**Notable Transitions:**\n\n"
+                for trans in transitions_list[:5]:  # Show top 5
+                    timestamp_min = int(trans["timestamp"] // 60)
+                    timestamp_sec = int(trans["timestamp"] % 60)
+                    text += f"- {timestamp_min}:{timestamp_sec:02d} - {trans['from'].title()} → {trans['to'].title()}\n"
+                text += "\n"
+
+            # Interpretation
+            if freq_per_min > 2.0:
+                text += "*High transition frequency suggests emotional volatility or task switching.*\n\n"
+            elif freq_per_min < 0.5:
+                text += "*Low transition frequency suggests stable emotional state.*\n\n"
+
+        # Section 4: Summary Statistics (original data)
+        text += "## Detailed Statistics\n\n"
+        if summary:
+            for emotion, stats in summary.items():
+                if isinstance(stats, dict):
+                    mean = stats.get("mean", 0.0)
+                    max_val = stats.get("max", 0.0)
+                    text += f"**{emotion.title()}:**\n"
+                    text += f"  - Average: {mean:.2f}\n"
+                    text += f"  - Peak: {max_val:.2f}\n\n"
+
+        return text
+
+    def _format_memories_results(self, results: dict) -> str:
+        """Display Memories.ai Markdown report directly without post-processing."""
+        # Get raw Markdown report from results
+        markdown_report = results.get("markdown_report", "")
+
+        if markdown_report:
+            # Return the VLM-generated Markdown report as-is
+            return markdown_report
+        else:
+            # Fallback for missing or empty report
+            return "# Memories.ai Pattern Analysis\n\nNo analysis report available."
+
     def closeEvent(self, event):
         """Handle window close event."""
+        # Check for active uploads first
+        if self.active_uploads:
+            num_uploads = len(self.active_uploads)
+            reply = QMessageBox.warning(
+                self,
+                "Uploads In Progress",
+                f"{num_uploads} cloud upload(s) in progress.\n\n"
+                "If you quit now, the uploads will be cancelled and you'll need to restart them.\n\n"
+                "Are you sure you want to quit?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+
+            if reply == QMessageBox.StandardButton.No:
+                event.ignore()
+                return
+
+        # Check for active session
         if self.session_active:
             reply = QMessageBox.question(
                 self,
@@ -941,11 +2901,11 @@ class MainWindow(QMainWindow):
                 "A session is active. Are you sure you want to quit?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
-            
+
             if reply == QMessageBox.StandardButton.No:
                 event.ignore()
                 return
-        
+
         logger.info("Application closing")
         event.accept()
 

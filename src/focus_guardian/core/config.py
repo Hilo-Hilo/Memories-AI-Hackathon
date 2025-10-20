@@ -81,7 +81,12 @@ class Config:
                 "K_hysteresis": 3,
                 "min_span_minutes": 1.0,
                 "alert_sound_enabled": True,
-                "data_retention_days": 30
+                "data_retention_days": 30,
+                "cloud_features_enabled": False,
+                "hume_ai_enabled": False,
+                "memories_ai_enabled": False,
+                "hume_ai_auto_upload": False,
+                "memories_ai_auto_upload": False
             }
             
             with open(default_config_path, 'w') as f:
@@ -322,12 +327,96 @@ class Config:
         """Get Google OAuth credentials."""
         client_id = os.getenv("GOOGLE_CLIENT_ID")
         client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-        
+
         if client_id and client_secret:
             return {"client_id": client_id, "client_secret": client_secret}
-        
+
         return None
-    
+
+    # ========================================================================
+    # Public API - Cloud Features Configuration
+    # ========================================================================
+
+    def is_cloud_features_enabled(self) -> bool:
+        """Check if cloud features are globally enabled (master switch)."""
+        value = self._get_config_value("cloud_features_enabled", False)
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes')
+        return bool(value)
+
+    def is_hume_ai_enabled(self) -> bool:
+        """Check if Hume AI emotion analysis is enabled."""
+        # Must have both cloud features enabled AND Hume AI specifically enabled
+        if not self.is_cloud_features_enabled():
+            return False
+        value = self._get_config_value("hume_ai_enabled", False)
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes')
+        return bool(value)
+
+    def is_memories_ai_enabled(self) -> bool:
+        """Check if Memories.ai pattern analysis is enabled."""
+        # Must have both cloud features enabled AND Memories AI specifically enabled
+        if not self.is_cloud_features_enabled():
+            return False
+        value = self._get_config_value("memories_ai_enabled", False)
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes')
+        return bool(value)
+
+    def is_hume_ai_auto_upload(self) -> bool:
+        """Check if Hume AI should auto-upload after each session."""
+        value = self._get_config_value("hume_ai_auto_upload", False)
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes')
+        return bool(value)
+
+    def is_memories_ai_auto_upload(self) -> bool:
+        """Check if Memories.ai should auto-upload after each session."""
+        value = self._get_config_value("memories_ai_auto_upload", False)
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes')
+        return bool(value)
+
+    def set_cloud_features_enabled(self, enabled: bool) -> None:
+        """Set cloud features master switch."""
+        self._user_config["cloud_features_enabled"] = enabled
+        self._save_user_config()
+        logger.info(f"Cloud features {'enabled' if enabled else 'disabled'}")
+
+    def set_hume_ai_enabled(self, enabled: bool) -> None:
+        """Enable/disable Hume AI emotion analysis."""
+        self._user_config["hume_ai_enabled"] = enabled
+        self._save_user_config()
+        logger.info(f"Hume AI {'enabled' if enabled else 'disabled'}")
+
+    def set_memories_ai_enabled(self, enabled: bool) -> None:
+        """Enable/disable Memories.ai pattern analysis."""
+        self._user_config["memories_ai_enabled"] = enabled
+        self._save_user_config()
+        logger.info(f"Memories.ai {'enabled' if enabled else 'disabled'}")
+
+    def set_hume_ai_auto_upload(self, enabled: bool) -> None:
+        """Enable/disable Hume AI auto-upload."""
+        self._user_config["hume_ai_auto_upload"] = enabled
+        self._save_user_config()
+        logger.info(f"Hume AI auto-upload {'enabled' if enabled else 'disabled'}")
+
+    def set_memories_ai_auto_upload(self, enabled: bool) -> None:
+        """Enable/disable Memories.ai auto-upload."""
+        self._user_config["memories_ai_auto_upload"] = enabled
+        self._save_user_config()
+        logger.info(f"Memories.ai auto-upload {'enabled' if enabled else 'disabled'}")
+
+    def _save_user_config(self) -> None:
+        """Save user configuration to encrypted JSON file."""
+        user_config_path = self.data_dir / "config.encrypted.json"
+        try:
+            with open(user_config_path, 'w') as f:
+                json.dump(self._user_config, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save user config: {e}")
+
     # ========================================================================
     # Public API - Paths
     # ========================================================================

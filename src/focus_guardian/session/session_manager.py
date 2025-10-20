@@ -9,7 +9,7 @@ that brings all components together.
 import uuid
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
 from ..core.config import Config
 from ..core.database import Database
@@ -24,6 +24,7 @@ from ..integrations.openai_vision_client import OpenAIVisionClient
 from ..integrations.hume_client import HumeExpressionClient
 from ..integrations.memories_client import MemoriesClient
 from ..session.report_generator import ReportGenerator
+from ..session.cloud_analysis_manager import CloudAnalysisManager
 from ..utils.queue_manager import QueueManager
 from ..utils.logger import get_logger
 
@@ -65,10 +66,11 @@ class SessionManager:
         self.hume_client: Optional[HumeExpressionClient] = None
         self.memories_client: Optional[MemoriesClient] = None
         self.report_generator: Optional[ReportGenerator] = None
-        
+        self.cloud_analysis_manager: Optional[CloudAnalysisManager] = None
+
         # Initialize post-processing clients if API keys available
         self._initialize_post_processing_clients()
-        
+
         logger.info("Session manager initialized")
     
     def start_session(
@@ -261,6 +263,14 @@ class SessionManager:
             hume_client=self.hume_client,
             memories_client=self.memories_client
         )
+
+        # Cloud analysis manager
+        self.cloud_analysis_manager = CloudAnalysisManager(
+            config=self.config,
+            database=self.database,
+            hume_client=self.hume_client,
+            memories_client=self.memories_client
+        )
     
     def _start_components(self) -> None:
         """Start all session components in correct order."""
@@ -403,10 +413,7 @@ class SessionManager:
                 self.report_generator.export_to_json(report, report_path)
                 
                 logger.info(f"Session report generated: {report_path}")
-                
-                # TODO: Optionally run cloud analysis (Hume AI, Memories.ai)
-                # This could be done in background after session ends
-                
+
             except Exception as e:
                 logger.error(f"Failed to generate report: {e}", exc_info=True)
         
@@ -416,9 +423,68 @@ class SessionManager:
         self.current_session_id = None
         
         logger.info("Session stopped successfully")
-        
+
         return session_id_for_return
-    
+
+    def upload_session_for_cloud_analysis(self, session_id: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Upload session videos to cloud providers for analysis.
+
+        This method BLOCKS until upload is complete, so caller should
+        display a progress dialog. After upload, processing happens
+        server-side and user can quit the app.
+
+        Args:
+            session_id: Session ID to upload
+
+        Returns:
+            Tuple of (hume_job_id, memories_job_id)
+        """
+        if not self.cloud_analysis_manager:
+            logger.error("Cloud analysis manager not initialized")
+            return None, None
+
+        # Get session from database
+        session = self.database.get_session(session_id)
+        if not session:
+            logger.error(f"Session not found: {session_id}")
+            return None, None
+
+        # Get video paths
+        cam_video_path = Path(session.cam_mp4_path)
+        screen_video_path = Path(session.screen_mp4_path) if session.screen_mp4_path else None
+
+        # Check which services to use
+        run_hume = self.config.is_hume_ai_enabled()
+        run_memories = self.config.is_memories_ai_enabled()
+
+        if not run_hume and not run_memories:
+            logger.info("No cloud analysis services enabled")
+            return None, None
+
+        # Upload (this will block until complete)
+        logger.info(f"Uploading session {session_id} for cloud analysis...")
+        hume_job_id, memories_job_id = self.cloud_analysis_manager.upload_session_for_analysis(
+            session_id=session_id,
+            cam_video_path=cam_video_path,
+            screen_video_path=screen_video_path,
+            run_hume=run_hume,
+            run_memories=run_memories
+        )
+
+        logger.info(f"Upload complete - Hume: {hume_job_id}, Memories: {memories_job_id}")
+
+        # Send notification to UI
+        if self.ui_queue:
+            self.ui_queue.put({
+                "type": "cloud_upload_complete",
+                "session_id": session_id,
+                "hume_job_id": hume_job_id,
+                "memories_job_id": memories_job_id
+            })
+
+        return hume_job_id, memories_job_id
+
     def get_session_stats(self) -> dict:
         """Get current session statistics."""
         if not self.current_session:

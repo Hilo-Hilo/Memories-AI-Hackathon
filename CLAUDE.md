@@ -156,17 +156,61 @@ pyinstaller --clean --noconfirm \
 
 **Authentication**: Set `HUME_API_KEY` in `.env` file
 
-**Usage**: Post-session emotion analysis of recorded video
+**Usage**: Post-session emotion analysis of recorded webcam video using facial expression AI
 
-**Cost**: ~$0.50 per 2-hour session
+**How it works**:
+- After session ends, webcam video (cam.mp4) can be uploaded to Hume AI Expression Measurement API
+- Analyzes facial expressions frame-by-frame to detect emotions: frustration, boredom, stress, concentration, confusion
+- Returns emotion timeline with timestamps and average emotion scores
+- Correlates emotion spikes with distraction events to provide insights like "Frustration preceded distraction"
+
+**Configuration** (in Settings UI or `.env`):
+```bash
+# Enable cloud features globally
+cloud_features_enabled=true
+
+# Enable Hume AI
+hume_ai_enabled=true
+
+# Auto-upload after each session (optional)
+hume_ai_auto_upload=false  # Set to true for automatic analysis
+```
+
+**Cost**: ~$0.50 per 2-hour session (varies by video length)
+
+**Implementation**: Uses official Hume Python SDK (`pip install hume`) with Batch API for asynchronous video processing
+
+**Privacy**: Videos are only uploaded if cloud features are enabled AND auto-upload is on, OR if user manually requests cloud analysis from Reports tab
 
 ### Memories.ai API (Optional - Post-processing)
 
-**Authentication**: Set `MEMORIES_API_KEY` in `.env` file
+**Authentication**: Set `MEM_AI_API_KEY` in `.env` file (note: uses `MEM_AI_API_KEY`, not `MEMORIES_API_KEY`)
 
-**Usage**: Post-session pattern analysis via multimodal chat
+**Usage**: Post-session comprehensive pattern analysis using multimodal VLM chat
 
-**Cost**: ~$1.00 per 2-hour session
+**How it works**:
+- After session ends, both webcam (cam.mp4) and screen (screen.mp4) videos uploaded to Memories.ai
+- Uses VLM (Vision-Language Model) to analyze temporal patterns across both video streams
+- Provides time segmentation (Focus/Break/Distraction), task hypothesis, app usage analysis, distraction triggers
+- Correlates webcam behavior (head movement, gaze) with screen content (apps, websites)
+
+**Configuration** (in Settings UI or `.env`):
+```bash
+# Enable cloud features globally
+cloud_features_enabled=true
+
+# Enable Memories.ai
+memories_ai_enabled=true
+
+# Auto-upload after each session (optional)
+memories_ai_auto_upload=false  # Set to true for automatic analysis
+```
+
+**Cost**: ~$1.00 per 2-hour session (varies by video length and analysis complexity)
+
+**Implementation**: Uses Memories.ai REST API with multipart video upload, polling for processing completion, and streaming chat for analysis
+
+**Privacy**: Videos are uploaded to Memories.ai cloud storage and persist under a unique session ID. User can delete videos via API. Only uploaded if cloud features enabled and auto-upload is on, OR manually requested.
 
 ## Architecture: Snapshot-Based Detection Pipeline
 
@@ -314,6 +358,13 @@ VIDEO_RES_PROFILE=Std              # Low|Std|High (affects recording quality)
 # Camera Selection
 CAMERA_INDEX=-1                    # Camera to use (-1 = auto-detect FaceTime HD)
 CAMERA_NAME="Auto-detect"          # Display name for selected camera
+
+# Cloud Features (Post-Session Analysis)
+CLOUD_FEATURES_ENABLED=false       # Master switch for all cloud features
+HUME_AI_ENABLED=false              # Enable Hume AI emotion analysis
+HUME_AI_AUTO_UPLOAD=false          # Auto-upload to Hume after each session
+MEMORIES_AI_ENABLED=false          # Enable Memories.ai pattern analysis
+MEMORIES_AI_AUTO_UPLOAD=false      # Auto-upload to Memories.ai after each session
 ```
 
 Loaded via `core/config.py`:
@@ -324,6 +375,13 @@ api_key = config.get_openai_api_key()  # Decrypted from config.encrypted.json
 camera_index = config.get_camera_index()  # Returns -1 for auto-detect
 vision_model = config.get_config_value("openai_vision_model", "gpt-5-nano")
 vision_detail = config.get_config_value("openai_vision_detail", "high")
+
+# Cloud features
+cloud_enabled = config.is_cloud_features_enabled()  # Master switch
+hume_enabled = config.is_hume_ai_enabled()  # Requires cloud_enabled=True
+memories_enabled = config.is_memories_ai_enabled()  # Requires cloud_enabled=True
+hume_auto = config.is_hume_ai_auto_upload()  # Auto-upload after session
+memories_auto = config.is_memories_ai_auto_upload()  # Auto-upload after session
 ```
 
 ## Module Structure

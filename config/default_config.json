@@ -17,6 +17,11 @@
   "queue_max_size": 100,
   "session_auto_save_interval_sec": 60,
   "camera_index": -1,
-  "camera_name": "Auto-detect (FaceTime HD)"
+  "camera_name": "Auto-detect (FaceTime HD)",
+  "cloud_features_enabled": false,
+  "hume_ai_enabled": false,
+  "memories_ai_enabled": false,
+  "hume_ai_auto_upload": false,
+  "memories_ai_auto_upload": false
 }
 

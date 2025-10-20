@@ -72,6 +72,28 @@ class SegmentLabel(Enum):
     SETUP = "Setup"
 
 
+class CloudProvider(Enum):
+    """Cloud analysis providers."""
+    MEMORIES_AI = "memories_ai"
+    HUME_AI = "hume_ai"
+
+
+class CloudJobStatus(Enum):
+    """Cloud analysis job lifecycle states."""
+    PENDING = "pending"
+    UPLOADING = "uploading"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class VideoType(Enum):
+    """Type of video for cloud analysis."""
+    WEBCAM = "webcam"
+    SCREEN = "screen"
+    BOTH = "both"
+
+
 # ============================================================================
 # Core Data Models
 # ============================================================================
@@ -172,6 +194,43 @@ class StateTransition:
     timestamp: datetime
     confidence: float
     evidence: Dict[str, Any]           # Vision votes and reasoning
+
+
+@dataclass
+class CloudAnalysisJob:
+    """Represents a cloud analysis job (Hume AI or Memories.ai)."""
+    # Required fields (no defaults)
+    job_id: str                        # UUID v4
+    session_id: str                    # Foreign key to Session
+    provider: CloudProvider            # memories_ai | hume_ai
+    status: CloudJobStatus             # pending | uploading | processing | completed | failed
+    video_type: VideoType              # webcam | screen | both
+    video_path: str                    # Path to video file(s)
+
+    # Optional fields (with defaults)
+    provider_job_id: Optional[str] = None  # External job/video ID from provider
+
+    # Job state timestamps
+    upload_started_at: Optional[datetime] = None
+    upload_completed_at: Optional[datetime] = None
+    processing_started_at: Optional[datetime] = None
+    processing_completed_at: Optional[datetime] = None
+
+    # Results tracking
+    results_fetched: bool = False
+    results_stored_at: Optional[datetime] = None
+    results_file_path: Optional[str] = None
+
+    # Deletion safety
+    can_delete_remote: bool = False    # Safe to delete from cloud
+    remote_deleted_at: Optional[datetime] = None
+
+    # Error tracking
+    retry_count: int = 0
+    last_error: Optional[str] = None
+
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
 
 
 # ============================================================================

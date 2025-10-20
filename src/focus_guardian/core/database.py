@@ -16,7 +16,8 @@ from ..core.models import (
     Session, SessionStatus, QualityProfile,
     Snapshot, SnapshotKind, UploadStatus,
     DistractionEvent, DistractionType,
-    SessionReport
+    SessionReport,
+    CloudAnalysisJob, CloudProvider, CloudJobStatus, VideoType
 )
 from ..utils.logger import get_logger
 
@@ -155,7 +156,47 @@ class Database:
             failed_snapshots=row['failed_snapshots'],
             total_events=row['total_events']
         )
-    
+
+    def get_all_sessions(self, limit: int = 50) -> List[Session]:
+        """
+        Get all sessions sorted by started_at descending (most recent first).
+
+        Args:
+            limit: Maximum number of sessions to return
+
+        Returns:
+            List of Session objects
+        """
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT * FROM sessions
+                ORDER BY started_at DESC
+                LIMIT ?
+            """, (limit,)).fetchall()
+
+        sessions = []
+        for row in rows:
+            sessions.append(Session(
+                session_id=row['session_id'],
+                started_at=datetime.fromisoformat(row['started_at']),
+                ended_at=datetime.fromisoformat(row['ended_at']) if row['ended_at'] else None,
+                task_name=row['task_name'],
+                quality_profile=QualityProfile(row['quality_profile']),
+                screen_enabled=bool(row['screen_enabled']),
+                status=SessionStatus(row['status']),
+                cam_mp4_path=row['cam_mp4_path'],
+                screen_mp4_path=row['screen_mp4_path'],
+                snapshots_dir=row['snapshots_dir'],
+                vision_dir=row['vision_dir'],
+                logs_dir=row['logs_dir'],
+                total_snapshots=row['total_snapshots'],
+                uploaded_snapshots=row['uploaded_snapshots'],
+                failed_snapshots=row['failed_snapshots'],
+                total_events=row['total_events']
+            ))
+
+        return sessions
+
     def end_session(self, session_id: str, ended_at: datetime) -> None:
         """Mark session as completed."""
         with self._get_connection() as conn:
@@ -202,7 +243,28 @@ class Database:
         with self._get_connection() as conn:
             conn.execute(sql, params)
             conn.commit()
-    
+
+    def delete_session(self, session_id: str) -> None:
+        """
+        Delete session and all related records.
+
+        Deletes from all tables: session_reports, cloud_analysis_jobs,
+        distraction_events, snapshots, and sessions.
+
+        Args:
+            session_id: Session ID to delete
+        """
+        with self._get_connection() as conn:
+            # Delete in reverse dependency order
+            conn.execute("DELETE FROM session_reports WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM cloud_analysis_jobs WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM distraction_events WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM snapshots WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+            conn.commit()
+
+        logger.info(f"Deleted session and all related records: {session_id}")
+
     # ========================================================================
     # Snapshot Operations
     # ========================================================================
@@ -443,4 +505,227 @@ class Database:
                 "hume_job_id": report.artifacts.hume_job_id
             }
         }
+
+    # ========================================================================
+    # Cloud Analysis Jobs Operations
+    # ========================================================================
+
+    def create_cloud_job(self, job: CloudAnalysisJob) -> str:
+        """
+        Create new cloud analysis job record.
+
+        Args:
+            job: CloudAnalysisJob object to insert
+
+        Returns:
+            job_id
+        """
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO cloud_analysis_jobs (
+                    job_id, session_id, provider, provider_job_id,
+                    status, upload_started_at, upload_completed_at,
+                    processing_started_at, processing_completed_at,
+                    results_fetched, results_stored_at, results_file_path,
+                    video_type, video_path,
+                    can_delete_remote, remote_deleted_at,
+                    retry_count, last_error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                job.job_id,
+                job.session_id,
+                job.provider.value,
+                job.provider_job_id,
+                job.status.value,
+                job.upload_started_at.isoformat() if job.upload_started_at else None,
+                job.upload_completed_at.isoformat() if job.upload_completed_at else None,
+                job.processing_started_at.isoformat() if job.processing_started_at else None,
+                job.processing_completed_at.isoformat() if job.processing_completed_at else None,
+                1 if job.results_fetched else 0,
+                job.results_stored_at.isoformat() if job.results_stored_at else None,
+                job.results_file_path,
+                job.video_type.value,
+                job.video_path,
+                1 if job.can_delete_remote else 0,
+                job.remote_deleted_at.isoformat() if job.remote_deleted_at else None,
+                job.retry_count,
+                job.last_error
+            ))
+            conn.commit()
+
+        logger.debug(f"Cloud job created: {job.job_id} ({job.provider.value})")
+        return job.job_id
+
+    def get_cloud_job(self, job_id: str) -> Optional[CloudAnalysisJob]:
+        """Get cloud job by job_id."""
+        with self._get_connection() as conn:
+            row = conn.execute("""
+                SELECT * FROM cloud_analysis_jobs WHERE job_id = ?
+            """, (job_id,)).fetchone()
+
+            if not row:
+                return None
+
+            return self._row_to_cloud_job(row)
+
+    def get_cloud_jobs_for_session(self, session_id: str) -> List[CloudAnalysisJob]:
+        """Get all cloud jobs for a session."""
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT * FROM cloud_analysis_jobs
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+            """, (session_id,)).fetchall()
+
+            return [self._row_to_cloud_job(row) for row in rows]
+
+    def get_cloud_jobs_by_status(self, status: CloudJobStatus) -> List[CloudAnalysisJob]:
+        """Get all cloud jobs with given status."""
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT * FROM cloud_analysis_jobs
+                WHERE status = ?
+                ORDER BY created_at DESC
+            """, (status.value,)).fetchall()
+
+            return [self._row_to_cloud_job(row) for row in rows]
+
+    def get_all_cloud_jobs_not_deleted(self) -> List[CloudAnalysisJob]:
+        """
+        Get all cloud jobs where videos are still stored in cloud.
+
+        Returns only completed jobs that have not been deleted yet
+        (remote_deleted_at IS NULL).
+
+        Returns:
+            List of CloudAnalysisJob objects still in cloud storage
+        """
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT * FROM cloud_analysis_jobs
+                WHERE remote_deleted_at IS NULL
+                  AND status = 'completed'
+                ORDER BY upload_completed_at DESC
+            """).fetchall()
+
+            return [self._row_to_cloud_job(row) for row in rows]
+
+    def update_cloud_job_status(
+        self,
+        job_id: str,
+        status: CloudJobStatus,
+        provider_job_id: Optional[str] = None,
+        error_message: Optional[str] = None
+    ) -> None:
+        """Update cloud job status and optionally provider_job_id."""
+        timestamp_field = None
+        timestamp_value = datetime.now().isoformat()
+
+        if status == CloudJobStatus.UPLOADING:
+            timestamp_field = "upload_started_at"
+        elif status == CloudJobStatus.PROCESSING:
+            timestamp_field = "processing_started_at"
+        elif status == CloudJobStatus.COMPLETED:
+            timestamp_field = "processing_completed_at"
+
+        with self._get_connection() as conn:
+            if timestamp_field:
+                conn.execute(f"""
+                    UPDATE cloud_analysis_jobs
+                    SET status = ?,
+                        provider_job_id = COALESCE(?, provider_job_id),
+                        {timestamp_field} = ?,
+                        last_error = ?
+                    WHERE job_id = ?
+                """, (status.value, provider_job_id, timestamp_value, error_message, job_id))
+            else:
+                conn.execute("""
+                    UPDATE cloud_analysis_jobs
+                    SET status = ?,
+                        provider_job_id = COALESCE(?, provider_job_id),
+                        last_error = ?
+                    WHERE job_id = ?
+                """, (status.value, provider_job_id, error_message, job_id))
+            conn.commit()
+
+        logger.debug(f"Cloud job status updated: {job_id} -> {status.value}")
+
+    def mark_cloud_job_upload_complete(self, job_id: str) -> None:
+        """Mark upload phase complete."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE cloud_analysis_jobs
+                SET upload_completed_at = ?,
+                    status = 'processing'
+                WHERE job_id = ?
+            """, (datetime.now().isoformat(), job_id))
+            conn.commit()
+
+    def mark_cloud_job_results_fetched(
+        self,
+        job_id: str,
+        results_file_path: str
+    ) -> None:
+        """Mark results as fetched and stored locally."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE cloud_analysis_jobs
+                SET results_fetched = 1,
+                    results_stored_at = ?,
+                    results_file_path = ?,
+                    can_delete_remote = 1,
+                    status = 'completed'
+                WHERE job_id = ?
+            """, (datetime.now().isoformat(), results_file_path, job_id))
+            conn.commit()
+
+        logger.debug(f"Cloud job results fetched: {job_id}")
+
+    def mark_cloud_video_deleted(self, job_id: str) -> None:
+        """Mark cloud video as deleted."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE cloud_analysis_jobs
+                SET remote_deleted_at = ?
+                WHERE job_id = ?
+            """, (datetime.now().isoformat(), job_id))
+            conn.commit()
+
+        logger.debug(f"Cloud video marked deleted: {job_id}")
+
+    def increment_cloud_job_retry(self, job_id: str, error: str) -> None:
+        """Increment retry count and update error message."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE cloud_analysis_jobs
+                SET retry_count = retry_count + 1,
+                    last_error = ?
+                WHERE job_id = ?
+            """, (error, job_id))
+            conn.commit()
+
+    def _row_to_cloud_job(self, row: sqlite3.Row) -> CloudAnalysisJob:
+        """Convert database row to CloudAnalysisJob object."""
+        return CloudAnalysisJob(
+            job_id=row['job_id'],
+            session_id=row['session_id'],
+            provider=CloudProvider(row['provider']),
+            provider_job_id=row['provider_job_id'],
+            status=CloudJobStatus(row['status']),
+            upload_started_at=datetime.fromisoformat(row['upload_started_at']) if row['upload_started_at'] else None,
+            upload_completed_at=datetime.fromisoformat(row['upload_completed_at']) if row['upload_completed_at'] else None,
+            processing_started_at=datetime.fromisoformat(row['processing_started_at']) if row['processing_started_at'] else None,
+            processing_completed_at=datetime.fromisoformat(row['processing_completed_at']) if row['processing_completed_at'] else None,
+            results_fetched=bool(row['results_fetched']),
+            results_stored_at=datetime.fromisoformat(row['results_stored_at']) if row['results_stored_at'] else None,
+            results_file_path=row['results_file_path'],
+            video_type=VideoType(row['video_type']),
+            video_path=row['video_path'],
+            can_delete_remote=bool(row['can_delete_remote']),
+            remote_deleted_at=datetime.fromisoformat(row['remote_deleted_at']) if row['remote_deleted_at'] else None,
+            retry_count=row['retry_count'],
+            last_error=row['last_error'],
+            created_at=datetime.fromisoformat(row['created_at']),
+            updated_at=datetime.fromisoformat(row['updated_at'])
+        )
 
