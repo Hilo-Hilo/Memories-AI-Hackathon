@@ -9,12 +9,16 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QPushButton, QLabel, QStatusBar,
     QSystemTrayIcon, QMenu, QMessageBox, QApplication,
-    QCheckBox
+    QCheckBox, QTableWidget, QDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+from datetime import datetime
 import json
+
+if TYPE_CHECKING:
+    from PyQt6.QtWidgets import QTableWidget, QDialog
 
 from ..core.config import Config
 from ..core.database import Database
@@ -47,6 +51,9 @@ class MainWindow(QMainWindow):
         
         self.config = config
         self.database = database
+        
+        # Theme mode (light/dark)
+        self.dark_mode = False
         
         # Create UI queue for receiving messages from background threads
         from queue import Queue
@@ -82,6 +89,9 @@ class MainWindow(QMainWindow):
         # Set minimum window size to prevent layout issues
         self.setMinimumSize(1000, 700)
         
+        # Apply initial theme
+        self._apply_theme()
+        
         # Connect signals
         self.distraction_alert.connect(self._handle_distraction_alert)
         self.micro_break_suggestion.connect(self._handle_micro_break_suggestion)
@@ -110,6 +120,314 @@ class MainWindow(QMainWindow):
                 logger.warning(f"Failed to initialize AI generators: {e}")
         
         logger.info("Main window initialized")
+    
+    def _get_colors(self):
+        """Get color palette based on current theme mode."""
+        if self.dark_mode:
+            return {
+                'bg_primary': '#1C1C1E',
+                'bg_secondary': '#2C2C2E',
+                'bg_tertiary': '#3A3A3C',
+                'card_bg': '#2C2C2E',
+                'accent_blue': '#0A84FF',
+                'accent_green': '#30D158',
+                'accent_orange': '#FF9F0A',
+                'accent_red': '#FF453A',
+                'text_primary': '#FFFFFF',
+                'text_secondary': '#98989D',
+                'text_tertiary': '#636366',
+                'border': '#48484A',
+                'hover_bg': 'rgba(10, 132, 255, 0.12)',
+                'shadow': 'rgba(0, 0, 0, 0.5)',
+            }
+        else:
+            return {
+                'bg_primary': '#F5F5F7',
+                'bg_secondary': '#FFFFFF',
+                'bg_tertiary': '#FAFAFA',
+                'card_bg': '#FFFFFF',
+                'accent_blue': '#007AFF',
+                'accent_green': '#34C759',
+                'accent_orange': '#FF9500',
+                'accent_red': '#FF3B30',
+                'text_primary': '#1C1C1E',
+                'text_secondary': '#8E8E93',
+                'text_tertiary': '#AEAEB2',
+                'border': '#D1D1D6',
+                'hover_bg': 'rgba(0, 122, 255, 0.08)',
+                'shadow': 'rgba(0, 0, 0, 0.08)',
+            }
+    
+    def _apply_theme(self):
+        """Apply theme to entire application."""
+        colors = self._get_colors()
+        
+        # Global application stylesheet
+        global_style = f"""
+            QMainWindow {{
+                background-color: {colors['bg_primary']};
+            }}
+            
+            QWidget {{
+                color: {colors['text_primary']};
+                font-size: 14px;
+            }}
+            
+            QTabWidget::pane {{
+                border: none;
+                background-color: {colors['bg_primary']};
+            }}
+            
+            QTabBar::tab {{
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_secondary']};
+                padding: 12px 24px;
+                border: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                margin-right: 4px;
+                font-size: 14px;
+                font-weight: 500;
+            }}
+            
+            QTabBar::tab:selected {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                font-weight: 600;
+            }}
+            
+            QTabBar::tab:hover:!selected {{
+                background-color: {colors['bg_secondary']};
+            }}
+            
+            QLineEdit, QTextEdit, QPlainTextEdit {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+                padding: 10px 12px;
+                font-size: 14px;
+                selection-background-color: {colors['accent_blue']};
+            }}
+            
+            QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
+                border: 2px solid {colors['accent_blue']};
+            }}
+            
+            QComboBox {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+                padding: 10px 12px;
+                font-size: 14px;
+                min-height: 24px;
+            }}
+            
+            QComboBox:focus {{
+                border: 2px solid {colors['accent_blue']};
+            }}
+            
+            QComboBox::drop-down {{
+                border: none;
+                width: 30px;
+            }}
+            
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid {colors['text_secondary']};
+                margin-right: 8px;
+            }}
+            
+            QComboBox QAbstractItemView {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+                padding: 4px;
+                selection-background-color: {colors['hover_bg']};
+            }}
+            
+            QScrollBar:vertical {{
+                background-color: {colors['bg_primary']};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            
+            QScrollBar::handle:vertical {{
+                background-color: {colors['text_tertiary']};
+                border-radius: 6px;
+                min-height: 30px;
+            }}
+            
+            QScrollBar::handle:vertical:hover {{
+                background-color: {colors['text_secondary']};
+            }}
+            
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            
+            QScrollBar:horizontal {{
+                background-color: {colors['bg_primary']};
+                height: 12px;
+                border-radius: 6px;
+            }}
+            
+            QScrollBar::handle:horizontal {{
+                background-color: {colors['text_tertiary']};
+                border-radius: 6px;
+                min-width: 30px;
+            }}
+            
+            QScrollBar::handle:horizontal:hover {{
+                background-color: {colors['text_secondary']};
+            }}
+            
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
+            
+            QCheckBox {{
+                spacing: 8px;
+                color: {colors['text_primary']};
+            }}
+            
+            QCheckBox::indicator {{
+                width: 20px;
+                height: 20px;
+                border-radius: 6px;
+                border: 2px solid {colors['border']};
+                background-color: {colors['card_bg']};
+            }}
+            
+            QCheckBox::indicator:checked {{
+                background-color: {colors['accent_blue']};
+                border-color: {colors['accent_blue']};
+                image: none;
+            }}
+            
+            QCheckBox::indicator:hover {{
+                border-color: {colors['accent_blue']};
+            }}
+            
+            QGroupBox {{
+                background-color: {colors['card_bg']};
+                border: 1px solid {colors['border']};
+                border-radius: 12px;
+                margin-top: 12px;
+                padding: 20px;
+                font-weight: 600;
+                font-size: 16px;
+            }}
+            
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 16px;
+                padding: 0 8px;
+                color: {colors['text_primary']};
+            }}
+            
+            QLabel {{
+                color: {colors['text_primary']};
+            }}
+            
+            QMessageBox {{
+                background-color: {colors['card_bg']};
+            }}
+            
+            QDialog {{
+                background-color: {colors['card_bg']};
+            }}
+        """
+        
+        self.setStyleSheet(global_style)
+        
+        # Re-apply component-specific styles
+        if hasattr(self, 'tabs'):
+            self._refresh_component_styles()
+    
+    def _refresh_component_styles(self):
+        """Refresh styles for all components after theme change."""
+        # This method is called during initial theme application
+        # The full refresh happens in _toggle_theme() which recreates all tabs
+        pass
+    
+    def _apply_button_styles(self):
+        """Apply modern button styles based on current theme."""
+        colors = self._get_colors()
+        
+        # Dashboard buttons
+        if hasattr(self, 'start_button'):
+            self.start_button.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {colors['accent_green']};
+                    color: white;
+                    font-size: 15px;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 10px;
+                    padding: 12px 24px;
+                }}
+                QPushButton:hover {{
+                    background-color: #30B350;
+                }}
+                QPushButton:pressed {{
+                    background-color: #2BA048;
+                }}
+                QPushButton:disabled {{
+                    background-color: {colors['text_tertiary']};
+                    opacity: 0.5;
+                }}
+            """)
+        
+        if hasattr(self, 'pause_button'):
+            self.pause_button.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {colors['accent_orange']};
+                    color: white;
+                    font-size: 15px;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 10px;
+                    padding: 12px 24px;
+                }}
+                QPushButton:hover {{
+                    background-color: #E68600;
+                }}
+                QPushButton:pressed {{
+                    background-color: #CC7700;
+                }}
+                QPushButton:disabled {{
+                    background-color: {colors['text_tertiary']};
+                    opacity: 0.5;
+                }}
+            """)
+        
+        if hasattr(self, 'stop_button'):
+            self.stop_button.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {colors['accent_red']};
+                    color: white;
+                    font-size: 15px;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 10px;
+                    padding: 12px 24px;
+                }}
+                QPushButton:hover {{
+                    background-color: #E6342B;
+                }}
+                QPushButton:pressed {{
+                    background-color: #CC2E26;
+                }}
+                QPushButton:disabled {{
+                    background-color: {colors['text_tertiary']};
+                    opacity: 0.5;
+                }}
+            """)
     
     def _load_task_history(self) -> list:
         """Load task history from database."""
@@ -141,15 +459,29 @@ class MainWindow(QMainWindow):
         """Show task input dialog with history dropdown."""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QComboBox, QLineEdit, QDialogButtonBox, QLabel
         
+        colors = self._get_colors()
+        
         dialog = QDialog(self)
         dialog.setWindowTitle("Start Focus Session")
-        dialog.setMinimumWidth(400)
+        dialog.setMinimumWidth(450)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['card_bg']};
+            }}
+        """)
         
         layout = QVBoxLayout(dialog)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 24, 24, 24)
         
         # Instructions
         instruction_label = QLabel("What task are you working on?")
-        instruction_label.setStyleSheet("font-size: 14px; font-weight: bold; margin-bottom: 10px;")
+        instruction_label.setStyleSheet(f"""
+            font-size: 18px; 
+            font-weight: 600; 
+            color: {colors['text_primary']};
+            margin-bottom: 4px;
+        """)
         layout.addWidget(instruction_label)
         
         # Combo box with editable text (history + custom input)
@@ -173,19 +505,15 @@ class MainWindow(QMainWindow):
             ])
         
         task_input.setCurrentText("")  # Start with empty input
-        task_input.setStyleSheet("""
-            QComboBox {
-                font-size: 14px;
-                padding: 8px;
-                border: 2px solid #3498db;
-                border-radius: 4px;
-            }
-        """)
         layout.addWidget(task_input)
         
         # Hint label
         hint_label = QLabel("Tip: Press Enter to start quickly")
-        hint_label.setStyleSheet("font-size: 11px; color: #7f8c8d; font-style: italic; margin-top: 5px;")
+        hint_label.setStyleSheet(f"""
+            font-size: 12px; 
+            color: {colors['text_secondary']}; 
+            font-style: italic;
+        """)
         layout.addWidget(hint_label)
         
         # Buttons
@@ -246,56 +574,83 @@ class MainWindow(QMainWindow):
     
     def _create_dashboard_tab(self) -> QWidget:
         """Create dashboard tab for active session view."""
+        colors = self._get_colors()
+        
         widget = QWidget()
+        widget.setStyleSheet(f"background-color: {colors['bg_primary']};")
         layout = QVBoxLayout(widget)
-        layout.setSpacing(20)
+        layout.setSpacing(24)
+        layout.setContentsMargins(24, 24, 24, 24)
         
         # Header
-        header_label = QLabel("Focus Session Dashboard")
-        header_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
+        header_label = QLabel("Focus Session")
+        header_label.setStyleSheet(f"""
+            font-size: 28px; 
+            font-weight: 700; 
+            color: {colors['text_primary']};
+            letter-spacing: -0.5px;
+        """)
         header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header_label)
         
-        # Session info
+        # Session info card
         info_widget = QWidget()
         info_layout = QVBoxLayout(info_widget)
-        info_widget.setStyleSheet("""
-            QWidget {
-                background-color: #ecf0f1;
-                border-radius: 10px;
-                padding: 20px;
-            }
+        info_layout.setSpacing(16)
+        info_layout.setContentsMargins(32, 32, 32, 32)
+        info_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {colors['card_bg']};
+                border-radius: 16px;
+            }}
         """)
         
         # Enhanced session status with colored indicator
         status_container = QWidget()
+        status_container.setStyleSheet("background: transparent;")
         status_layout = QHBoxLayout(status_container)
         status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        status_layout.setSpacing(10)
+        status_layout.setSpacing(12)
         
-        self.session_status_icon = QLabel("⚫")
-        self.session_status_icon.setStyleSheet("font-size: 24px;")
+        self.session_status_icon = QLabel("●")
+        self.session_status_icon.setStyleSheet(f"""
+            font-size: 16px;
+            color: {colors['text_tertiary']};
+        """)
         status_layout.addWidget(self.session_status_icon)
         
         self.session_status_label = QLabel("No active session")
-        self.session_status_label.setStyleSheet("font-size: 18px; color: #7f8c8d;")
+        self.session_status_label.setStyleSheet(f"""
+            font-size: 16px; 
+            color: {colors['text_secondary']};
+            font-weight: 500;
+        """)
         status_layout.addWidget(self.session_status_label)
         
         # Recording indicators (hidden by default)
         self.recording_indicators = QLabel("📷 🖥️")
-        self.recording_indicators.setStyleSheet("font-size: 16px; margin-left: 10px;")
+        self.recording_indicators.setStyleSheet("font-size: 14px; margin-left: 8px;")
         self.recording_indicators.setVisible(False)
         status_layout.addWidget(self.recording_indicators)
         
         info_layout.addWidget(status_container)
         
         self.session_timer_label = QLabel("00:00:00")
-        self.session_timer_label.setStyleSheet("font-size: 48px; font-weight: bold; color: #3498db;")
+        self.session_timer_label.setStyleSheet(f"""
+            font-size: 64px; 
+            font-weight: 700; 
+            color: {colors['accent_blue']};
+            letter-spacing: -1px;
+        """)
         self.session_timer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info_layout.addWidget(self.session_timer_label)
         
         self.task_label = QLabel("Task: None")
-        self.task_label.setStyleSheet("font-size: 16px; color: #34495e;")
+        self.task_label.setStyleSheet(f"""
+            font-size: 16px; 
+            color: {colors['text_secondary']};
+            font-weight: 500;
+        """)
         self.task_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info_layout.addWidget(self.task_label)
         
@@ -303,66 +658,24 @@ class MainWindow(QMainWindow):
         
         # Control buttons
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(12)
         
         self.start_button = QPushButton("Start Focus Session")
-        self.start_button.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-                padding: 15px;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #229954;
-            }
-            QPushButton:disabled {
-                background-color: #95a5a6;
-            }
-        """)
+        self.start_button.setMinimumHeight(44)
+        self.start_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.start_button.clicked.connect(self._on_start_session)
         button_layout.addWidget(self.start_button)
         
         self.pause_button = QPushButton("Pause")
-        self.pause_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f39c12;
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-                padding: 15px;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #e67e22;
-            }
-            QPushButton:disabled {
-                background-color: #95a5a6;
-            }
-        """)
+        self.pause_button.setMinimumHeight(44)
+        self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pause_button.clicked.connect(self._on_pause_session)
         self.pause_button.setEnabled(False)
         button_layout.addWidget(self.pause_button)
         
         self.stop_button = QPushButton("Stop Session")
-        self.stop_button.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c;
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-                padding: 15px;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
-            QPushButton:disabled {
-                background-color: #95a5a6;
-            }
-        """)
+        self.stop_button.setMinimumHeight(44)
+        self.stop_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.stop_button.clicked.connect(self._on_stop_session)
         self.stop_button.setEnabled(False)
         button_layout.addWidget(self.stop_button)
@@ -370,40 +683,46 @@ class MainWindow(QMainWindow):
         layout.addLayout(button_layout)
         
         # Enhanced stats display with visual indicators
-        stats_label = QLabel("Session Statistics")
-        stats_label.setStyleSheet("font-size: 18px; font-weight: bold; margin-top: 20px;")
+        stats_label = QLabel("Statistics")
+        stats_label.setStyleSheet(f"""
+            font-size: 20px; 
+            font-weight: 600;
+            color: {colors['text_primary']};
+            margin-top: 8px;
+        """)
         layout.addWidget(stats_label)
         
         stats_widget = QWidget()
-        stats_widget.setStyleSheet("""
-            QWidget {
-                background-color: #ffffff;
-                border: 1px solid #bdc3c7;
-                border-radius: 8px;
-                padding: 15px;
-            }
+        stats_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {colors['card_bg']};
+                border-radius: 12px;
+            }}
         """)
         stats_layout = QVBoxLayout(stats_widget)
+        stats_layout.setSpacing(16)
+        stats_layout.setContentsMargins(24, 24, 24, 24)
         
         # First row: Counters (clickable for details)
         counters_layout = QHBoxLayout()
+        counters_layout.setSpacing(16)
         
         # Make labels clickable buttons for detailed view
         self.snapshots_label = QPushButton("📸 Snapshots: 0")
-        self.snapshots_label.setStyleSheet("""
-            QPushButton {
+        self.snapshots_label.setStyleSheet(f"""
+            QPushButton {{
                 font-size: 14px;
-                color: #3498db;
-                font-weight: bold;
+                color: {colors['accent_blue']};
+                font-weight: 600;
                 background: transparent;
                 border: none;
                 text-align: left;
-                padding: 5px;
-            }
-            QPushButton:hover {
-                background-color: #ecf0f1;
-                border-radius: 4px;
-            }
+                padding: 8px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {colors['hover_bg']};
+                border-radius: 8px;
+            }}
         """)
         self.snapshots_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self.snapshots_label.setToolTip("Click to see detailed snapshot analysis")
@@ -411,20 +730,20 @@ class MainWindow(QMainWindow):
         counters_layout.addWidget(self.snapshots_label)
         
         self.distractions_label = QPushButton("⚠️ Distractions: 0")
-        self.distractions_label.setStyleSheet("""
-            QPushButton {
+        self.distractions_label.setStyleSheet(f"""
+            QPushButton {{
                 font-size: 14px;
-                color: #e74c3c;
-                font-weight: bold;
+                color: {colors['accent_red']};
+                font-weight: 600;
                 background: transparent;
                 border: none;
                 text-align: left;
-                padding: 5px;
-            }
-            QPushButton:hover {
-                background-color: #ecf0f1;
-                border-radius: 4px;
-            }
+                padding: 8px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {colors['hover_bg']};
+                border-radius: 8px;
+            }}
         """)
         self.distractions_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self.distractions_label.setToolTip("Click to see distraction breakdown and voting details")
@@ -432,20 +751,20 @@ class MainWindow(QMainWindow):
         counters_layout.addWidget(self.distractions_label)
         
         self.focus_ratio_label = QPushButton("✓ Focus: 100%")
-        self.focus_ratio_label.setStyleSheet("""
-            QPushButton {
+        self.focus_ratio_label.setStyleSheet(f"""
+            QPushButton {{
                 font-size: 14px;
-                color: #27ae60;
-                font-weight: bold;
+                color: {colors['accent_green']};
+                font-weight: 600;
                 background: transparent;
                 border: none;
                 text-align: left;
-                padding: 5px;
-            }
-            QPushButton:hover {
-                background-color: #ecf0f1;
-                border-radius: 4px;
-            }
+                padding: 8px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {colors['hover_bg']};
+                border-radius: 8px;
+            }}
         """)
         self.focus_ratio_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self.focus_ratio_label.setToolTip("Click to see detailed focus analysis")
@@ -460,18 +779,19 @@ class MainWindow(QMainWindow):
         self.focus_progress_bar.setRange(0, 100)
         self.focus_progress_bar.setValue(100)
         self.focus_progress_bar.setTextVisible(False)
-        self.focus_progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #bdc3c7;
+        self.focus_progress_bar.setFixedHeight(8)
+        self.focus_progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                border: none;
                 border-radius: 4px;
-                height: 20px;
-                background-color: #ecf0f1;
-            }
-            QProgressBar::chunk {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                                   stop:0 #27ae60, stop:1 #2ecc71);
-                border-radius: 3px;
-            }
+                background-color: {colors['bg_tertiary']};
+            }}
+            QProgressBar::chunk {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {colors['accent_green']}, 
+                    stop:1 #32de84);
+                border-radius: 4px;
+            }}
         """)
         stats_layout.addWidget(self.focus_progress_bar)
         
@@ -486,30 +806,45 @@ class MainWindow(QMainWindow):
     def _create_reports_tab(self) -> QWidget:
         """Create reports tab for session history."""
         from PyQt6.QtWidgets import QScrollArea, QFrame
+        
+        colors = self._get_colors()
 
         widget = QWidget()
+        widget.setStyleSheet(f"background-color: {colors['bg_primary']};")
         layout = QVBoxLayout(widget)
+        layout.setSpacing(20)
+        layout.setContentsMargins(24, 24, 24, 24)
 
         # Header
         header_layout = QHBoxLayout()
         label = QLabel("Session Reports")
-        label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        label.setStyleSheet(f"""
+            font-size: 24px; 
+            font-weight: 700;
+            color: {colors['text_primary']};
+            letter-spacing: -0.5px;
+        """)
         header_layout.addWidget(label)
+
+        header_layout.addStretch()
 
         # Refresh all button
         self.refresh_all_btn = QPushButton("🔄 Refresh All")
-        self.refresh_all_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
+        self.refresh_all_btn.setMinimumHeight(36)
+        self.refresh_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.refresh_all_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
                 color: white;
                 border: none;
-                border-radius: 4px;
+                border-radius: 8px;
                 padding: 8px 16px;
                 font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+            }}
         """)
         self.refresh_all_btn.setToolTip("Refresh status of all processing cloud jobs")
         self.refresh_all_btn.clicked.connect(self._on_refresh_all_sessions)
@@ -517,19 +852,21 @@ class MainWindow(QMainWindow):
         
         # Batch Upload All button
         self.batch_upload_btn = QPushButton("☁️ Upload All Completed")
-        self.batch_upload_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #9b59b6;
+        self.batch_upload_btn.setMinimumHeight(36)
+        self.batch_upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.batch_upload_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #AF52DE;
                 color: white;
                 border: none;
-                border-radius: 4px;
+                border-radius: 8px;
                 padding: 8px 16px;
                 font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #8e44ad;
-            }
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: #9F42CE;
+            }}
         """)
         self.batch_upload_btn.setToolTip("Upload all completed sessions that haven't been uploaded yet")
         self.batch_upload_btn.clicked.connect(self._on_batch_upload_sessions)
@@ -541,24 +878,15 @@ class MainWindow(QMainWindow):
         
         # Search and filter bar
         filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(12)
         
         # Search box
         from PyQt6.QtWidgets import QLineEdit
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("🔍 Search sessions by task name...")
-        self.search_box.setStyleSheet("""
-            QLineEdit {
-                padding: 8px;
-                border: 1px solid #bdc3c7;
-                border-radius: 4px;
-                font-size: 13px;
-            }
-            QLineEdit:focus {
-                border: 2px solid #3498db;
-            }
-        """)
+        self.search_box.setMinimumHeight(36)
         self.search_box.textChanged.connect(self._on_search_changed)
-        filter_layout.addWidget(self.search_box)
+        filter_layout.addWidget(self.search_box, 2)
         
         # Filter dropdown
         from PyQt6.QtWidgets import QComboBox
@@ -572,17 +900,10 @@ class MainWindow(QMainWindow):
             "Without Cloud Analysis",
             "Upload Failed"
         ])
-        self.filter_combo.setStyleSheet("""
-            QComboBox {
-                padding: 8px;
-                border: 1px solid #bdc3c7;
-                border-radius: 4px;
-                font-size: 13px;
-                min-width: 150px;
-            }
-        """)
+        self.filter_combo.setMinimumHeight(36)
+        self.filter_combo.setMinimumWidth(180)
         self.filter_combo.currentTextChanged.connect(self._on_filter_changed)
-        filter_layout.addWidget(self.filter_combo)
+        filter_layout.addWidget(self.filter_combo, 1)
         
         layout.addLayout(filter_layout)
 
@@ -610,23 +931,57 @@ class MainWindow(QMainWindow):
         from PyQt6.QtWidgets import QComboBox, QGroupBox, QFormLayout, QScrollArea, QFrame, QTabWidget
         from ..capture.screen_capture import WebcamCapture
 
+        colors = self._get_colors()
+
         # Create main widget
         widget = QWidget()
+        widget.setStyleSheet(f"background-color: {colors['bg_primary']};")
         main_layout = QVBoxLayout(widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(24, 24, 24, 24)
+        main_layout.setSpacing(20)
 
-        # Header with developer mode toggle
+        # Header with theme and developer mode toggles
         header_layout = QHBoxLayout()
 
         label = QLabel("Settings")
-        label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        label.setStyleSheet(f"""
+            font-size: 24px; 
+            font-weight: 700;
+            color: {colors['text_primary']};
+            letter-spacing: -0.5px;
+        """)
         header_layout.addWidget(label)
         
         header_layout.addStretch()
         
+        # Theme toggle button
+        self.theme_toggle_btn = QPushButton("🌙 Dark Mode" if not self.dark_mode else "☀️ Light Mode")
+        self.theme_toggle_btn.setMinimumHeight(36)
+        self.theme_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.theme_toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+            }}
+        """)
+        self.theme_toggle_btn.clicked.connect(self._toggle_theme)
+        header_layout.addWidget(self.theme_toggle_btn)
+        
         # Developer mode toggle
-        self.developer_mode_checkbox = QCheckBox("🔧 Enable Developer Options")
-        self.developer_mode_checkbox.setStyleSheet("font-size: 13px; font-weight: bold; color: #e67e22;")
+        self.developer_mode_checkbox = QCheckBox("🔧 Developer Options")
+        self.developer_mode_checkbox.setStyleSheet(f"""
+            font-size: 14px; 
+            font-weight: 600; 
+            color: {colors['accent_orange']};
+        """)
         self.developer_mode_checkbox.stateChanged.connect(self._toggle_developer_mode)
         header_layout.addWidget(self.developer_mode_checkbox)
         
@@ -651,6 +1006,9 @@ class MainWindow(QMainWindow):
         """Create the general settings widget (existing settings content)."""
         from PyQt6.QtWidgets import QComboBox, QGroupBox, QFormLayout, QScrollArea, QFrame
         from ..capture.screen_capture import WebcamCapture
+
+        # Get colors for theme
+        colors = self._get_colors()
 
         # Create scroll area for the entire settings content
         scroll_area = QScrollArea()
@@ -692,14 +1050,14 @@ class MainWindow(QMainWindow):
         instruction_label = QLabel(
             "Detecting available cameras..."
         )
-        instruction_label.setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;")
+        instruction_label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px; font-style: italic;")
         camera_layout.addRow("", instruction_label)
 
         # Camera status label
         self.camera_status_label = QLabel(
             f"✓ Current: {self.config.get_camera_name()}"
         )
-        self.camera_status_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+        self.camera_status_label.setStyleSheet(f"color: {colors['accent_green']}; font-size: 13px; font-weight: 500;")
         camera_layout.addRow("Status:", self.camera_status_label)
 
         # Buttons in horizontal layout
@@ -707,35 +1065,41 @@ class MainWindow(QMainWindow):
 
         # Preview button
         preview_btn = QPushButton("Show Live Preview")
+        preview_btn.setMinimumHeight(36)
+        preview_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         preview_btn.clicked.connect(self._show_camera_preview)
-        preview_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
+        preview_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_green']};
                 color: white;
                 border: none;
                 padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #229954;
-            }
+                border-radius: 8px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: #30B350;
+            }}
         """)
         button_layout.addWidget(preview_btn)
 
         # Refresh button
         refresh_btn = QPushButton("Refresh List")
+        refresh_btn.setMinimumHeight(36)
+        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh_btn.clicked.connect(self._refresh_camera_list)
-        refresh_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
+        refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
                 color: white;
                 border: none;
                 padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
+                border-radius: 8px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+            }}
         """)
         button_layout.addWidget(refresh_btn)
 
@@ -824,7 +1188,7 @@ class MainWindow(QMainWindow):
             "Upload session videos to cloud services for advanced post-processing analysis.\n"
             "Videos are only uploaded AFTER the session ends if auto-upload is enabled."
         )
-        cloud_desc.setStyleSheet("color: #7f8c8d; font-size: 11px; margin-left: 20px;")
+        cloud_desc.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px; margin-left: 20px;")
         cloud_desc.setWordWrap(True)
         cloud_layout.addWidget(cloud_desc)
 
@@ -853,7 +1217,7 @@ class MainWindow(QMainWindow):
         hume_layout.addWidget(self.hume_auto_upload_checkbox)
 
         hume_info = QLabel("Analyzes facial expressions for emotion timeline (frustration, boredom, stress)")
-        hume_info.setStyleSheet("color: #95a5a6; font-size: 10px; margin-left: 40px;")
+        hume_info.setStyleSheet(f"color: {colors['text_tertiary']}; font-size: 10px; margin-left: 40px;")
         hume_info.setWordWrap(True)
         hume_layout.addWidget(hume_info)
 
@@ -884,7 +1248,7 @@ class MainWindow(QMainWindow):
         memories_layout.addWidget(self.memories_auto_upload_checkbox)
 
         memories_info = QLabel("Comprehensive VLM analysis: task detection, app usage, distraction patterns")
-        memories_info.setStyleSheet("color: #95a5a6; font-size: 10px; margin-left: 40px;")
+        memories_info.setStyleSheet(f"color: {colors['text_tertiary']}; font-size: 10px; margin-left: 40px;")
         memories_info.setWordWrap(True)
         memories_layout.addWidget(memories_info)
 
@@ -895,26 +1259,28 @@ class MainWindow(QMainWindow):
             "Privacy: Full videos stay local by default. They are only uploaded to cloud services "
             "when you enable auto-upload or manually request cloud analysis."
         )
-        privacy_notice.setStyleSheet("color: #e67e22; font-size: 11px; margin-top: 10px; font-style: italic;")
+        privacy_notice.setStyleSheet(f"color: {colors['accent_orange']}; font-size: 11px; margin-top: 10px; font-style: italic;")
         privacy_notice.setWordWrap(True)
         cloud_layout.addWidget(privacy_notice)
 
         # Cloud Storage Management button
         storage_mgmt_btn = QPushButton("🗄️ Manage Cloud Storage")
-        storage_mgmt_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
+        storage_mgmt_btn.setMinimumHeight(36)
+        storage_mgmt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        storage_mgmt_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
                 color: white;
                 border: none;
                 padding: 10px 20px;
-                border-radius: 6px;
+                border-radius: 8px;
                 font-size: 14px;
-                font-weight: bold;
+                font-weight: 600;
                 margin-top: 15px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+            }}
         """)
         storage_mgmt_btn.clicked.connect(self._on_manage_cloud_storage)
         cloud_layout.addWidget(storage_mgmt_btn)
@@ -952,15 +1318,19 @@ class MainWindow(QMainWindow):
             "Modifying prompts changes how AI analyzes your sessions. "
             "Changes take effect immediately for new operations."
         )
-        warning_label.setStyleSheet("""
-            QLabel {
-                background-color: #fff3cd;
-                color: #856404;
+        colors = self._get_colors()
+        warning_bg = '#FFF3CD' if not self.dark_mode else '#3A3420'
+        warning_text = '#856404' if not self.dark_mode else '#FFD700'
+        warning_border = '#FFC107' if not self.dark_mode else '#B8860B'
+        warning_label.setStyleSheet(f"""
+            QLabel {{
+                background-color: {warning_bg};
+                color: {warning_text};
                 padding: 15px;
-                border-radius: 6px;
-                border-left: 4px solid #ffc107;
+                border-radius: 8px;
+                border-left: 4px solid {warning_border};
                 font-size: 12px;
-            }
+            }}
         """)
         warning_label.setWordWrap(True)
         layout.addWidget(warning_label)
@@ -985,6 +1355,38 @@ class MainWindow(QMainWindow):
         
         scroll_area.setWidget(scroll_widget)
         return scroll_area
+    
+    def _toggle_theme(self):
+        """Toggle between light and dark mode."""
+        self.dark_mode = not self.dark_mode
+        
+        # Apply new theme
+        self._apply_theme()
+        
+        # Force recreation of all tabs to apply new theme
+        if hasattr(self, 'tabs'):
+            # Store current tab index
+            current_index = self.tabs.currentIndex()
+            
+            # Clear and recreate tabs
+            self.tabs.clear()
+            
+            # Recreate dashboard tab
+            self.dashboard_tab = self._create_dashboard_tab()
+            self.tabs.addTab(self.dashboard_tab, "Dashboard")
+            
+            # Recreate reports tab
+            self.reports_tab = self._create_reports_tab()
+            self.tabs.addTab(self.reports_tab, "Reports")
+            
+            # Recreate settings tab
+            self.settings_tab = self._create_settings_tab()
+            self.tabs.addTab(self.settings_tab, "Settings")
+            
+            # Restore tab index
+            self.tabs.setCurrentIndex(current_index)
+        
+        logger.info(f"Theme switched to {'dark' if self.dark_mode else 'light'} mode")
     
     def _toggle_developer_mode(self, state):
         """Toggle developer options tab visibility."""
@@ -1090,8 +1492,9 @@ class MainWindow(QMainWindow):
         
         layout = QVBoxLayout(group)
         
+        colors = self._get_colors()
         desc_label = QLabel("This prompt is sent to Memories.ai for video analysis:")
-        desc_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        desc_label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px;")
         layout.addWidget(desc_label)
         
         self.memories_prompt_edit = QTextEdit()
@@ -1136,8 +1539,9 @@ class MainWindow(QMainWindow):
         
         layout = QVBoxLayout(group)
         
+        colors = self._get_colors()
         desc_label = QLabel("Template for generating comprehensive reports (uses GPT-4):")
-        desc_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        desc_label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px;")
         layout.addWidget(desc_label)
         
         self.comprehensive_prompt_edit = QTextEdit()
@@ -1182,8 +1586,9 @@ class MainWindow(QMainWindow):
         
         layout = QVBoxLayout(group)
         
+        colors = self._get_colors()
         desc_label = QLabel("View raw snapshot analysis data and JSON schemas:")
-        desc_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        desc_label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px;")
         layout.addWidget(desc_label)
         
         btn_layout = QHBoxLayout()
@@ -1479,33 +1884,66 @@ Return as markdown with clear sections and formatting."""
             with open(vision_file, 'r') as f:
                 vision_data = json.load(f)
             
+            # Get theme colors
+            colors = self._get_colors()
+            
             # Create dialog
             dialog = QDialog(self)
             dialog.setWindowTitle("🔍 Snapshot Analysis Details")
             dialog.setMinimumSize(700, 600)
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background-color: {colors['bg_primary']};
+                }}
+            """)
             
             layout = QVBoxLayout(dialog)
             
             # Info header
             info = QLabel(f"Snapshot: {last_snap.timestamp.strftime('%H:%M:%S') if last_snap.timestamp else 'N/A'}")
-            info.setStyleSheet("font-weight: bold; font-size: 14px;")
+            info.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {colors['text_primary']};")
             layout.addWidget(info)
             
             # JSON display
             text_edit = QTextEdit()
             text_edit.setReadOnly(True)
             text_edit.setPlainText(json.dumps(vision_data, indent=2))
-            text_edit.setStyleSheet("font-family: 'Courier New', monospace; font-size: 11px;")
+            text_edit.setStyleSheet(f"""
+                QTextEdit {{
+                    font-family: 'Courier New', monospace;
+                    font-size: 11px;
+                    background-color: {colors['card_bg']};
+                    color: {colors['text_primary']};
+                    border: 1px solid {colors['border']};
+                    border-radius: 4px;
+                }}
+            """)
             layout.addWidget(text_edit)
             
             # Parsed labels
             labels_text = "\n".join([f"• {k}: {v:.0%}" for k, v in last_snap.vision_labels.items()])
             parsed_label = QLabel(f"Parsed Labels:\n{labels_text}")
-            parsed_label.setStyleSheet("background-color: #e8f5e9; padding: 10px; border-radius: 4px;")
+            parsed_label.setStyleSheet(f"""
+                background-color: {colors['accent_green'] if self.dark_mode else '#e8f5e9'};
+                color: {colors['text_primary']};
+                padding: 10px;
+                border-radius: 4px;
+            """)
             layout.addWidget(parsed_label)
             
             # Close button
             button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            button_box.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {colors['accent_blue']};
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-weight: 600;
+                    min-width: 80px;
+                }}
+            """)
             button_box.rejected.connect(dialog.reject)
             layout.addWidget(button_box)
             
@@ -1576,8 +2014,9 @@ Return as markdown with clear sections and formatting."""
         self.config.set_camera_config(camera_index, camera_name)
 
         # Update status
+        colors = self._get_colors()
         self.camera_status_label.setText(f"✓ Saved: {camera_name}")
-        self.camera_status_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+        self.camera_status_label.setStyleSheet(f"color: {colors['accent_green']}; font-size: 13px;")
 
         # Show warning if session is active
         if self.session_active:
@@ -1595,8 +2034,9 @@ Return as markdown with clear sections and formatting."""
         from ..capture.screen_capture import WebcamCapture
 
         # Show loading message
+        colors = self._get_colors()
         self.camera_status_label.setText("⏳ Scanning for cameras...")
-        self.camera_status_label.setStyleSheet("color: #f39c12; font-size: 13px;")
+        self.camera_status_label.setStyleSheet(f"color: {colors['accent_orange']}; font-size: 13px;")
         QApplication.processEvents()  # Update UI immediately
 
         try:
@@ -1640,8 +2080,9 @@ Return as markdown with clear sections and formatting."""
                     self.config.set_camera_config(last_camera["index"], last_camera["name"])
 
             # Update status
+            colors = self._get_colors()
             self.camera_status_label.setText(f"✓ Found {len(cameras)} camera(s)")
-            self.camera_status_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+            self.camera_status_label.setStyleSheet(f"color: {colors['accent_green']}; font-size: 13px;")
 
             logger.info(f"Camera list refreshed: {len(cameras)} cameras found")
 
@@ -1656,8 +2097,9 @@ Return as markdown with clear sections and formatting."""
 
         except Exception as e:
             logger.error(f"Failed to refresh camera list: {e}", exc_info=True)
+            colors = self._get_colors()
             self.camera_status_label.setText("❌ Scan failed")
-            self.camera_status_label.setStyleSheet("color: #e74c3c; font-size: 13px;")
+            self.camera_status_label.setStyleSheet(f"color: {colors['accent_red']}; font-size: 13px;")
             QMessageBox.warning(
                 self,
                 "Camera Refresh Failed",
@@ -1672,8 +2114,9 @@ Return as markdown with clear sections and formatting."""
         from ..capture.screen_capture import WebcamCapture
 
         # Show loading message
+        colors = self._get_colors()
         self.camera_status_label.setText("⏳ Detecting cameras...")
-        self.camera_status_label.setStyleSheet("color: #f39c12; font-size: 13px;")
+        self.camera_status_label.setStyleSheet(f"color: {colors['accent_orange']}; font-size: 13px;")
 
         try:
             logger.info("Auto-detecting cameras on startup...")
@@ -1684,8 +2127,9 @@ Return as markdown with clear sections and formatting."""
                 logger.info(f"  Camera: index={cam['index']}, name={cam['name']}")
 
             if not cameras:
+                colors = self._get_colors()
                 self.camera_status_label.setText("❌ No cameras found")
-                self.camera_status_label.setStyleSheet("color: #e74c3c; font-size: 13px;")
+                self.camera_status_label.setStyleSheet(f"color: {colors['accent_red']}; font-size: 13px;")
                 return
 
             # Save current selection
@@ -1714,16 +2158,18 @@ Return as markdown with clear sections and formatting."""
                     logger.info(f"Defaulted to last camera: index={last_camera['index']}, name={last_camera['name']}")
 
             # Update status
+            colors = self._get_colors()
             selected_camera = self.camera_combo.currentText()
             self.camera_status_label.setText(f"✓ {selected_camera}")
-            self.camera_status_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+            self.camera_status_label.setStyleSheet(f"color: {colors['accent_green']}; font-size: 13px;")
 
             logger.info(f"Camera auto-detection complete: {len(cameras)} camera(s) found")
 
         except Exception as e:
             logger.error(f"Failed to auto-detect cameras: {e}", exc_info=True)
+            colors = self._get_colors()
             self.camera_status_label.setText("❌ Detection failed")
-            self.camera_status_label.setStyleSheet("color: #e74c3c; font-size: 13px;")
+            self.camera_status_label.setStyleSheet(f"color: {colors['accent_red']}; font-size: 13px;")
 
     def _show_camera_preview(self):
         """Show live camera preview window."""
@@ -1736,21 +2182,29 @@ Return as markdown with clear sections and formatting."""
         camera_index = self.camera_combo.itemData(self.camera_combo.currentIndex())
         camera_name = self.camera_combo.currentText()
 
+        # Get theme colors
+        colors = self._get_colors()
+
         # Create preview dialog
         preview_dialog = QDialog(self)
         preview_dialog.setWindowTitle(f"Camera Preview - {camera_name}")
         preview_dialog.setMinimumSize(640, 480)
+        preview_dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
 
         layout = QVBoxLayout(preview_dialog)
 
         # Video label
         video_label = QLabel()
-        video_label.setStyleSheet("border: 2px solid #bdc3c7;")
+        video_label.setStyleSheet(f"border: 2px solid {colors['border']};")
         layout.addWidget(video_label)
 
         # Status label
         status_label = QLabel(f"Camera: {camera_name} (Index: {camera_index})")
-        status_label.setStyleSheet("font-size: 12px; color: #7f8c8d;")
+        status_label.setStyleSheet(f"font-size: 12px; color: {colors['text_secondary']};")
         layout.addWidget(status_label)
 
         # Try to open camera
@@ -1880,12 +2334,23 @@ Return as markdown with clear sections and formatting."""
             return
         
         # Update status with enhanced visual indicators
-        self.session_status_icon.setText("🟢")  # Green active indicator
+        colors = self._get_colors()
+        self.session_status_icon.setText("●")
+        self.session_status_icon.setStyleSheet(f"font-size: 16px; color: {colors['accent_green']};")
         self.session_status_label.setText("Session Active")
-        self.session_status_label.setStyleSheet("font-size: 18px; color: #27ae60; font-weight: bold;")
+        self.session_status_label.setStyleSheet(f"""
+            font-size: 16px; 
+            color: {colors['accent_green']}; 
+            font-weight: 600;
+        """)
         self.recording_indicators.setVisible(True)  # Show recording icons
         
         self.task_label.setText(f"Task: {task_name}")
+        self.task_label.setStyleSheet(f"""
+            font-size: 16px; 
+            color: {colors['text_primary']};
+            font-weight: 600;
+        """)
         
         self.start_button.setEnabled(False)
         self.pause_button.setEnabled(True)
@@ -1936,9 +2401,15 @@ Return as markdown with clear sections and formatting."""
             self.session_timer.stop()
             
             # Update status indicators for paused state
-            self.session_status_icon.setText("🟡")  # Yellow paused indicator
+            colors = self._get_colors()
+            self.session_status_icon.setText("●")
+            self.session_status_icon.setStyleSheet(f"font-size: 16px; color: {colors['accent_orange']};")
             self.session_status_label.setText("Session Paused")
-            self.session_status_label.setStyleSheet("font-size: 18px; color: #f39c12; font-weight: bold;")
+            self.session_status_label.setStyleSheet(f"""
+                font-size: 16px; 
+                color: {colors['accent_orange']}; 
+                font-weight: 600;
+            """)
             
             self.status_bar.showMessage("🟡 Session paused")
             
@@ -1957,9 +2428,15 @@ Return as markdown with clear sections and formatting."""
             self.session_timer.start(1000)
             
             # Update status indicators back to active
-            self.session_status_icon.setText("🟢")  # Green active indicator
+            colors = self._get_colors()
+            self.session_status_icon.setText("●")
+            self.session_status_icon.setStyleSheet(f"font-size: 16px; color: {colors['accent_green']};")
             self.session_status_label.setText("Session Active")
-            self.session_status_label.setStyleSheet("font-size: 18px; color: #27ae60; font-weight: bold;")
+            self.session_status_label.setStyleSheet(f"""
+                font-size: 16px; 
+                color: {colors['accent_green']}; 
+                font-weight: 600;
+            """)
             
             self.status_bar.showMessage("🟢 Session resumed")
             
@@ -1985,12 +2462,31 @@ Return as markdown with clear sections and formatting."""
             self.stats_timer.stop()
 
             # Reset status indicators
-            self.session_status_icon.setText("⚫")  # Gray idle indicator
+            colors = self._get_colors()
+            self.session_status_icon.setText("●")
+            self.session_status_icon.setStyleSheet(f"font-size: 16px; color: {colors['text_tertiary']};")
             self.session_status_label.setText("No active session")
-            self.session_status_label.setStyleSheet("font-size: 18px; color: #7f8c8d;")
+            self.session_status_label.setStyleSheet(f"""
+                font-size: 16px; 
+                color: {colors['text_secondary']};
+                font-weight: 500;
+            """)
             self.recording_indicators.setVisible(False)  # Hide recording icons
             
             self.session_timer_label.setText("00:00:00")
+            self.session_timer_label.setStyleSheet(f"""
+                font-size: 64px; 
+                font-weight: 700; 
+                color: {colors['accent_blue']};
+                letter-spacing: -1px;
+            """)
+            
+            self.task_label.setText("Task: None")
+            self.task_label.setStyleSheet(f"""
+                font-size: 16px; 
+                color: {colors['text_secondary']};
+                font-weight: 500;
+            """)
             self.task_label.setText("Task: None")
 
             self.start_button.setEnabled(True)
@@ -2318,10 +2814,18 @@ Return as markdown with clear sections and formatting."""
             # Show resizable dialog instead of fixed-width QMessageBox
             from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QScrollArea, QFrame
             
+            # Get theme colors
+            colors = self._get_colors()
+            
             dialog = QDialog(self)
             dialog.setWindowTitle("✨ Session Complete - AI Summary")
             dialog.setMinimumSize(800, 600)
             dialog.resize(950, 750)  # Default comfortable size
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background-color: {colors['bg_primary']};
+                }}
+            """)
             
             layout = QVBoxLayout(dialog)
             
@@ -2329,20 +2833,26 @@ Return as markdown with clear sections and formatting."""
             scroll_area = QScrollArea()
             scroll_area.setWidgetResizable(True)
             scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+            scroll_area.setStyleSheet(f"""
+                QScrollArea {{
+                    background-color: {colors['bg_primary']};
+                    border: none;
+                }}
+            """)
             
             # Text display
             text_display = QTextEdit()
             text_display.setReadOnly(True)
             text_display.setHtml(summary)
-            text_display.setStyleSheet("""
-                QTextEdit {
+            text_display.setStyleSheet(f"""
+                QTextEdit {{
                     font-size: 13px;
-                    color: #2c3e50;
-                    background-color: white;
+                    color: {colors['text_primary']};
+                    background-color: {colors['card_bg']};
                     border: none;
                     padding: 15px;
                     line-height: 1.6;
-                }
+                }}
             """)
             
             scroll_area.setWidget(text_display)
@@ -2350,6 +2860,17 @@ Return as markdown with clear sections and formatting."""
             
             # Buttons
             button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            button_box.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {colors['accent_blue']};
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-weight: 600;
+                    min-width: 80px;
+                }}
+            """)
             button_box.accepted.connect(dialog.accept)
             layout.addWidget(button_box)
             
@@ -2430,10 +2951,18 @@ Return as markdown with clear sections and formatting."""
             # Create resizable dialog
             from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QScrollArea, QFrame, QLabel
             
+            # Get theme colors
+            colors = self._get_colors()
+            
             dialog = QDialog(self)
             dialog.setWindowTitle(f"✨ AI Summary - {task_name}")
             dialog.setMinimumSize(800, 600)
             dialog.resize(950, 750)
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background-color: {colors['bg_primary']};
+                }}
+            """)
             
             layout = QVBoxLayout(dialog)
             
@@ -2488,16 +3017,24 @@ Return as markdown with clear sections and formatting."""
         if not session:
             return
         
+        # Get theme colors
+        colors = self._get_colors()
+        
         # Create dialog
         dialog = QDialog(self)
         dialog.setWindowTitle("Session Complete")
         dialog.setMinimumWidth(500)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
         
         layout = QVBoxLayout(dialog)
         
         # Header
         header = QLabel(f"<h2>Session Complete: {session.task_name}</h2>")
-        header.setStyleSheet("color: #2c3e50;")
+        header.setStyleSheet(f"color: {colors['text_primary']};")
         layout.addWidget(header)
         
         # Basic stats
@@ -2787,11 +3324,19 @@ Return as markdown with clear sections and formatting."""
                 )
                 return
             
+            # Get theme colors
+            colors = self._get_colors()
+            
             # Create dialog
             dialog = QDialog(self)
             dialog.setWindowTitle(f"📊 Comprehensive AI Report - {task_name}")
             dialog.setMinimumSize(900, 700)
             dialog.resize(1000, 800)
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background-color: {colors['bg_primary']};
+                }}
+            """)
             
             layout = QVBoxLayout(dialog)
             
@@ -3142,7 +3687,9 @@ Historical Trends, Snapshot Analysis</p>
         thread.start()
         thread.join(timeout=30)  # 30 second timeout
 
-        loading.close()
+        # Properly dismiss the loading dialog
+        loading.hide()
+        loading.deleteLater()
 
         # Check for errors
         if error_msg:
@@ -3172,10 +3719,18 @@ Historical Trends, Snapshot Analysis</p>
             )
             return
 
+        # Get theme colors
+        colors = self._get_colors()
+        
         # Create dialog
         dialog = QDialog(self)
         dialog.setWindowTitle("Cloud Storage Management")
         dialog.setMinimumSize(900, 600)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
 
         layout = QVBoxLayout(dialog)
 
@@ -3190,15 +3745,15 @@ Historical Trends, Snapshot Analysis</p>
             summary_text += f"\n\nWarning: {summary['error']}"
 
         summary_label = QLabel(summary_text)
-        summary_label.setStyleSheet("""
-            QLabel {
+        summary_label.setStyleSheet(f"""
+            QLabel {{
                 font-size: 13px;
-                color: #2c3e50;
-                background-color: #ffffff;
+                color: {colors['text_primary']};
+                background-color: {colors['card_bg']};
                 padding: 15px;
-                border: 1px solid #bdc3c7;
+                border: 1px solid {colors['border']};
                 border-radius: 6px;
-            }
+            }}
         """)
         summary_label.setWordWrap(True)
         layout.addWidget(summary_label)
@@ -3930,16 +4485,24 @@ Historical Trends, Snapshot Analysis</p>
         if session_folder.exists():
             folder_size_mb = sum(f.stat().st_size for f in session_folder.rglob('*') if f.is_file()) / (1024 * 1024)
 
+        # Get theme colors
+        colors = self._get_colors()
+        
         # Create custom dialog
         dialog = QDialog(self)
         dialog.setWindowTitle("Delete Session")
         dialog.setMinimumWidth(400)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
 
         layout = QVBoxLayout(dialog)
 
         # Header
         header = QLabel(f"<b>Delete session \"{session.task_name}\"?</b>")
-        header.setStyleSheet("font-size: 14px; margin-bottom: 10px;")
+        header.setStyleSheet(f"font-size: 14px; margin-bottom: 10px; color: {colors['text_primary']};")
         layout.addWidget(header)
 
         # Session info
@@ -3949,26 +4512,26 @@ Historical Trends, Snapshot Analysis</p>
             f"Duration: {duration}\n"
             f"Files: {folder_size_mb:.1f} MB"
         )
-        info.setStyleSheet("color: #7f8c8d; margin-bottom: 15px;")
+        info.setStyleSheet(f"color: {colors['text_secondary']}; margin-bottom: 15px;")
         layout.addWidget(info)
 
         # Radio buttons for deletion options
         button_group = QButtonGroup(dialog)
 
         record_only_radio = QRadioButton("Delete record only (keep video files)")
-        record_only_radio.setStyleSheet("margin-bottom: 5px;")
+        record_only_radio.setStyleSheet(f"margin-bottom: 5px; color: {colors['text_primary']};")
         button_group.addButton(record_only_radio, 1)
         layout.addWidget(record_only_radio)
 
         delete_all_radio = QRadioButton("Delete record + all files (cam.mp4, screen.mp4, snapshots)")
-        delete_all_radio.setStyleSheet("margin-bottom: 15px;")
+        delete_all_radio.setStyleSheet(f"margin-bottom: 15px; color: {colors['text_primary']};")
         delete_all_radio.setChecked(True)  # Default to delete all
         button_group.addButton(delete_all_radio, 2)
         layout.addWidget(delete_all_radio)
 
         # Warning
         warning = QLabel("⚠️ This action cannot be undone!")
-        warning.setStyleSheet("color: #e74c3c; font-weight: bold; margin-bottom: 10px;")
+        warning.setStyleSheet(f"color: {colors['accent_red']}; font-weight: bold; margin-bottom: 10px;")
         layout.addWidget(warning)
 
         # Buttons
@@ -3976,17 +4539,18 @@ Historical Trends, Snapshot Analysis</p>
             QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok
         )
         button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Delete")
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c;
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_red']};
                 color: white;
                 padding: 6px 16px;
                 border-radius: 4px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {colors['accent_red']};
+                opacity: 0.85;
+            }}
         """)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
@@ -4047,8 +4611,9 @@ Historical Trends, Snapshot Analysis</p>
         all_sessions = self.database.get_all_sessions(limit=50)
 
         if not all_sessions:
+            colors = self._get_colors()
             placeholder = QLabel("No sessions found. Complete a focus session to see reports here.")
-            placeholder.setStyleSheet("color: #7f8c8d; font-size: 14px; padding: 20px;")
+            placeholder.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 14px; padding: 20px;")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.sessions_layout.addWidget(placeholder)
             return
@@ -4063,8 +4628,9 @@ Historical Trends, Snapshot Analysis</p>
         filtered_sessions = self._apply_session_filter(all_sessions, filter_type)
 
         if not filtered_sessions:
+            colors = self._get_colors()
             placeholder = QLabel(f"No sessions match the current filters.\n\nTry adjusting your search or filter settings.")
-            placeholder.setStyleSheet("color: #7f8c8d; font-size: 14px; padding: 20px;")
+            placeholder.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 14px; padding: 20px;")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setWordWrap(True)
             self.sessions_layout.addWidget(placeholder)
@@ -4237,19 +4803,47 @@ Historical Trends, Snapshot Analysis</p>
         # Get snapshots from database
         snapshots = self.database.get_snapshots_for_session(self.current_session_id)
         
+        # Get theme colors
+        colors = self._get_colors()
+        
         dialog = QDialog(self)
         dialog.setWindowTitle("📸 Snapshot Analysis Details")
         dialog.setMinimumSize(900, 600)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
         
         layout = QVBoxLayout(dialog)
         
         # Header summary
         summary = QLabel(f"<h2>Snapshot Analysis</h2><p>Total snapshots: <b>{len(snapshots)}</b></p>")
-        summary.setStyleSheet("color: #2c3e50;")
+        summary.setStyleSheet(f"color: {colors['text_primary']};")
         layout.addWidget(summary)
         
         # Create table for snapshot details
         table = QTableWidget()
+        table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 8px;
+                gridline-color: {colors['border']};
+            }}
+            QTableWidget::item {{
+                padding: 8px;
+                color: {colors['text_primary']};
+            }}
+            QHeaderView::section {{
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_primary']};
+                padding: 8px;
+                border: none;
+                font-weight: 600;
+            }}
+        """)
         table.setColumnCount(6)
         table.setHorizontalHeaderLabels([
             "Time", "Type", "Status", "Labels", "Confidence", "Latency"
@@ -4306,6 +4900,21 @@ Historical Trends, Snapshot Analysis</p>
         
         # Close button
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+            QPushButton:hover {{
+                background-color: {colors['accent_blue']};
+                opacity: 0.9;
+            }}
+        """)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
         
@@ -4327,9 +4936,17 @@ Historical Trends, Snapshot Analysis</p>
         events = self.database.get_session_events(self.current_session_id)
         snapshots = self.database.get_snapshots_for_session(self.current_session_id)
         
+        # Get theme colors
+        colors = self._get_colors()
+        
         dialog = QDialog(self)
         dialog.setWindowTitle("⚠️ Distraction Analysis Details")
         dialog.setMinimumSize(900, 700)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
         
         layout = QVBoxLayout(dialog)
         
@@ -4337,8 +4954,19 @@ Historical Trends, Snapshot Analysis</p>
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {colors['bg_primary']};
+                border: none;
+            }}
+        """)
         
         content_widget = QWidget()
+        content_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
         content_layout = QVBoxLayout(content_widget)
         
         # Build detailed report inline
@@ -4347,16 +4975,16 @@ Historical Trends, Snapshot Analysis</p>
         text_display = QTextEdit()
         text_display.setReadOnly(True)
         text_display.setHtml(html)
-        text_display.setStyleSheet("""
-            QTextEdit {
+        text_display.setStyleSheet(f"""
+            QTextEdit {{
                 font-size: 13px;
-                color: #2c3e50;
-                background-color: white;
-                border: 1px solid #bdc3c7;
+                color: {colors['text_primary']};
+                background-color: {colors['card_bg']};
+                border: 1px solid {colors['border']};
                 border-radius: 4px;
                 padding: 15px;
                 line-height: 1.5;
-            }
+            }}
         """)
         content_layout.addWidget(text_display)
         
@@ -4365,6 +4993,21 @@ Historical Trends, Snapshot Analysis</p>
         
         # Close button
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+            QPushButton:hover {{
+                background-color: {colors['accent_blue']};
+                opacity: 0.9;
+            }}
+        """)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
         
@@ -4526,16 +5169,7 @@ Historical Trends, Snapshot Analysis</p>
         
         html += "</div>"
         
-        text_display.setHtml(html)
-        
-        layout.addWidget(text_display)
-        
-        # Close button
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-        
-        dialog.exec()
+        return html
     
     def _build_distraction_report(self, events: list, snapshots: list) -> str:
         """Build detailed HTML report for distraction analysis."""
@@ -4679,32 +5313,46 @@ Historical Trends, Snapshot Analysis</p>
         from PyQt6.QtWidgets import QFrame, QGridLayout
         from ..core.models import CloudJobStatus, CloudProvider
 
+        colors = self._get_colors()
+
         card = QFrame()
-        card.setFrameShape(QFrame.Shape.Box)
-        card.setStyleSheet("""
-            QFrame {
-                border: 1px solid #bdc3c7;
-                border-radius: 8px;
-                background-color: #ecf0f1;
-                padding: 15px;
-            }
+        card.setFrameShape(QFrame.Shape.NoFrame)
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {colors['card_bg']};
+                border-radius: 12px;
+                padding: 20px;
+            }}
         """)
 
         layout = QGridLayout(card)
+        layout.setSpacing(12)
 
         # Session info
         row = 0
-        task_label = QLabel(f"<b>{session.task_name}</b>")
-        task_label.setStyleSheet("font-size: 16px; color: #2c3e50;")
+        task_label = QLabel(session.task_name)
+        task_label.setStyleSheet(f"""
+            font-size: 17px; 
+            font-weight: 700;
+            color: {colors['text_primary']};
+        """)
         layout.addWidget(task_label, row, 0, 1, 2)
 
         row += 1
-        date_label = QLabel(f"Date: {session.started_at.strftime('%Y-%m-%d %H:%M')}")
-        date_label.setStyleSheet("color: #2c3e50; font-size: 13px;")
+        date_label = QLabel(f"📅 {session.started_at.strftime('%b %d, %Y at %H:%M')}")
+        date_label.setStyleSheet(f"""
+            color: {colors['text_secondary']}; 
+            font-size: 13px;
+            font-weight: 500;
+        """)
         layout.addWidget(date_label, row, 0)
 
-        duration_label = QLabel(f"Duration: {self._format_duration(session)}")
-        duration_label.setStyleSheet("color: #2c3e50; font-size: 13px;")
+        duration_label = QLabel(f"⏱️ {self._format_duration(session)}")
+        duration_label.setStyleSheet(f"""
+            color: {colors['text_secondary']}; 
+            font-size: 13px;
+            font-weight: 500;
+        """)
         layout.addWidget(duration_label, row, 1)
 
         # Cloud analysis section
@@ -4717,26 +5365,28 @@ Historical Trends, Snapshot Analysis</p>
                 is_uploading = session.session_id in self.active_uploads
 
                 # Enhanced upload button with progress indicator
-                btn_text = "⬆️ Uploading..." if is_uploading else "☁️ Upload to Cloud for Analysis"
+                btn_text = "⬆️ Uploading..." if is_uploading else "☁️ Upload to Cloud"
                 upload_btn = QPushButton(btn_text)
                 upload_btn.setEnabled(not is_uploading)  # Disable if uploading
-                upload_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #9b59b6;
+                upload_btn.setMinimumHeight(32)
+                upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                upload_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #AF52DE;
                         color: white;
                         border: none;
-                        border-radius: 4px;
-                        padding: 8px 12px;
+                        border-radius: 8px;
+                        padding: 8px 16px;
                         font-size: 13px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover {
-                        background-color: #8e44ad;
-                    }
-                    QPushButton:disabled {
-                        background-color: #95a5a6;
-                        color: #ecf0f1;
-                    }
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #9F42CE;
+                    }}
+                    QPushButton:disabled {{
+                        background-color: {colors['text_tertiary']};
+                        opacity: 0.5;
+                    }}
                 """)
                 
                 # Add tooltip
@@ -4752,7 +5402,11 @@ Historical Trends, Snapshot Analysis</p>
             # Has cloud jobs - show status for each
             for job in cloud_jobs:
                 status_label = QLabel(f"{job.provider.value}: {self._get_status_badge(job.status)}")
-                status_label.setStyleSheet("color: #2c3e50; font-size: 13px;")
+                status_label.setStyleSheet(f"""
+                    color: {colors['text_primary']}; 
+                    font-size: 13px;
+                    font-weight: 500;
+                """)
                 layout.addWidget(status_label, row, 0)
 
                 # Only show check status button for PROCESSING jobs
@@ -4780,23 +5434,25 @@ Historical Trends, Snapshot Analysis</p>
                     
                     refresh_btn = QPushButton(btn_text)
                     refresh_btn.setEnabled(not is_refreshing)  # Disable if refreshing
-                    refresh_btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #3498db;
+                    refresh_btn.setMinimumHeight(28)
+                    refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                    refresh_btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {colors['accent_blue']};
                             color: white;
                             border: none;
-                            border-radius: 4px;
+                            border-radius: 6px;
                             padding: 4px 12px;
                             font-size: 12px;
-                            font-weight: bold;
-                        }
-                        QPushButton:hover {
-                            background-color: #2980b9;
-                        }
-                        QPushButton:disabled {
-                            background-color: #95a5a6;
-                            color: #ecf0f1;
-                        }
+                            font-weight: 600;
+                        }}
+                        QPushButton:hover {{
+                            background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                        }}
+                        QPushButton:disabled {{
+                            background-color: {colors['text_tertiary']};
+                            opacity: 0.5;
+                        }}
                     """)
                     
                     tooltip_text = "Check if cloud processing is complete and retrieve results"
@@ -4812,43 +5468,49 @@ Historical Trends, Snapshot Analysis</p>
                     # Check if upload is in progress for this session
                     is_uploading = session.session_id in self.active_uploads
 
-                    retry_btn = QPushButton("Uploading..." if is_uploading else "Retry Upload")
+                    retry_btn = QPushButton("Uploading..." if is_uploading else "🔄 Retry")
                     retry_btn.setEnabled(not is_uploading)  # Disable if uploading
-                    retry_btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #e67e22;
+                    retry_btn.setMinimumHeight(28)
+                    retry_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                    retry_btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {colors['accent_orange']};
                             color: white;
                             border: none;
-                            border-radius: 4px;
+                            border-radius: 6px;
                             padding: 4px 12px;
                             font-size: 12px;
-                        }
-                        QPushButton:hover {
-                            background-color: #d35400;
-                        }
-                        QPushButton:disabled {
-                            background-color: #95a5a6;
-                            color: #ecf0f1;
-                        }
+                            font-weight: 600;
+                        }}
+                        QPushButton:hover {{
+                            background-color: #E68600;
+                        }}
+                        QPushButton:disabled {{
+                            background-color: {colors['text_tertiary']};
+                            opacity: 0.5;
+                        }}
                     """)
                     retry_btn.clicked.connect(lambda checked, sid=session.session_id: self._on_upload_to_cloud(sid))
                     layout.addWidget(retry_btn, row, 1)
 
                 # Show details button for COMPLETED jobs
                 elif job.status == CloudJobStatus.COMPLETED:
-                    details_btn = QPushButton("Show Details")
-                    details_btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #27ae60;
+                    details_btn = QPushButton("📄 Details")
+                    details_btn.setMinimumHeight(28)
+                    details_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                    details_btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: {colors['accent_green']};
                             color: white;
                             border: none;
-                            border-radius: 4px;
+                            border-radius: 6px;
                             padding: 4px 12px;
                             font-size: 12px;
-                        }
-                        QPushButton:hover {
-                            background-color: #229954;
-                        }
+                            font-weight: 600;
+                        }}
+                        QPushButton:hover {{
+                            background-color: #30B350;
+                        }}
                     """)
                     details_btn.clicked.connect(lambda checked, jid=job.job_id: self._on_show_cloud_details(jid))
                     layout.addWidget(details_btn, row, 1)
@@ -4870,23 +5532,25 @@ Historical Trends, Snapshot Analysis</p>
                 btn_text = "⏳ Regenerating..." if is_regen_hume else "🔄 Regen Hume AI"
                 regen_hume_btn = QPushButton(btn_text)
                 regen_hume_btn.setEnabled(not is_regen_hume)
-                regen_hume_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #3498db;
+                regen_hume_btn.setMinimumHeight(28)
+                regen_hume_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                regen_hume_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {colors['accent_blue']};
                         color: white;
                         border: none;
-                        border-radius: 4px;
-                        padding: 4px 8px;
+                        border-radius: 6px;
+                        padding: 4px 10px;
                         font-size: 11px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover {
-                        background-color: #2980b9;
-                    }
-                    QPushButton:disabled {
-                        background-color: #95a5a6;
-                        color: #ecf0f1;
-                    }
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                    }}
+                    QPushButton:disabled {{
+                        background-color: {colors['text_tertiary']};
+                        opacity: 0.5;
+                    }}
                 """)
                 tooltip = "Regenerating in background..." if is_regen_hume else "Regenerate Hume AI emotion analysis (old archived)"
                 regen_hume_btn.setToolTip(tooltip)
@@ -4899,23 +5563,25 @@ Historical Trends, Snapshot Analysis</p>
                 btn_text = "⏳ Regenerating..." if is_regen_memories else "🔄 Regen Memories.ai"
                 regen_memories_btn = QPushButton(btn_text)
                 regen_memories_btn.setEnabled(not is_regen_memories)
-                regen_memories_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #9b59b6;
+                regen_memories_btn.setMinimumHeight(28)
+                regen_memories_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                regen_memories_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #AF52DE;
                         color: white;
                         border: none;
-                        border-radius: 4px;
-                        padding: 4px 8px;
+                        border-radius: 6px;
+                        padding: 4px 10px;
                         font-size: 11px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover {
-                        background-color: #8e44ad;
-                    }
-                    QPushButton:disabled {
-                        background-color: #95a5a6;
-                        color: #ecf0f1;
-                    }
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #9F42CE;
+                    }}
+                    QPushButton:disabled {{
+                        background-color: {colors['text_tertiary']};
+                        opacity: 0.5;
+                    }}
                 """)
                 tooltip = "Regenerating in background..." if is_regen_memories else "Regenerate Memories.ai pattern analysis (old archived)"
                 regen_memories_btn.setToolTip(tooltip)
@@ -4936,23 +5602,25 @@ Historical Trends, Snapshot Analysis</p>
                 btn_text = "🔄 Regenerating..." if is_generating else "🔄 Regenerate AI Report"
                 regen_btn = QPushButton(btn_text)
                 regen_btn.setEnabled(not is_generating)
-                regen_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e67e22;
+                regen_btn.setMinimumHeight(32)
+                regen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                regen_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {colors['accent_orange']};
                         color: white;
                         border: none;
-                        border-radius: 4px;
-                        padding: 6px 12px;
-                        font-size: 12px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover {
-                        background-color: #d35400;
-                    }
-                    QPushButton:disabled {
-                        background-color: #95a5a6;
-                        color: #ecf0f1;
-                    }
+                        border-radius: 8px;
+                        padding: 8px 16px;
+                        font-size: 13px;
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #E68600;
+                    }}
+                    QPushButton:disabled {{
+                        background-color: {colors['text_tertiary']};
+                        opacity: 0.5;
+                    }}
                 """)
                 regen_btn.setToolTip("Regenerate comprehensive report with latest data (old archived)")
                 regen_btn.clicked.connect(lambda: self._on_regenerate_comprehensive_only(session.session_id))
@@ -4961,19 +5629,21 @@ Historical Trends, Snapshot Analysis</p>
                 
                 # View button below regenerate
                 view_comprehensive_btn = QPushButton("📊 View Comprehensive AI Report")
-                view_comprehensive_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #8e44ad;
+                view_comprehensive_btn.setMinimumHeight(36)
+                view_comprehensive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                view_comprehensive_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #AF52DE;
                         color: white;
                         border: none;
-                        border-radius: 4px;
-                        padding: 8px 16px;
-                        font-size: 13px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover {
-                        background-color: #7d3c98;
-                    }
+                        border-radius: 8px;
+                        padding: 10px 16px;
+                        font-size: 14px;
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #9F42CE;
+                    }}
                 """)
                 view_comprehensive_btn.setToolTip("View full AI-generated report with historical trends")
                 view_comprehensive_btn.clicked.connect(lambda: self._on_view_comprehensive_report(session.session_id))
@@ -4986,23 +5656,25 @@ Historical Trends, Snapshot Analysis</p>
                 btn_text = "🔄 Generating AI Report..." if is_generating else "🤖 Generate Comprehensive AI Report"
                 generate_btn = QPushButton(btn_text)
                 generate_btn.setEnabled(not is_generating)
-                generate_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e67e22;
+                generate_btn.setMinimumHeight(36)
+                generate_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                generate_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {colors['accent_orange']};
                         color: white;
                         border: none;
-                        border-radius: 4px;
-                        padding: 8px 16px;
-                        font-size: 13px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover {
-                        background-color: #d35400;
-                    }
-                    QPushButton:disabled {
-                        background-color: #95a5a6;
-                        color: #ecf0f1;
-                    }
+                        border-radius: 8px;
+                        padding: 10px 16px;
+                        font-size: 14px;
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #E68600;
+                    }}
+                    QPushButton:disabled {{
+                        background-color: {colors['text_tertiary']};
+                        opacity: 0.5;
+                    }}
                 """)
                 tooltip = "Generating report in background..." if is_generating else "Generate long-form AI report using Hume AI, Memories.ai, and historical data"
                 generate_btn.setToolTip(tooltip)
@@ -5017,19 +5689,21 @@ Historical Trends, Snapshot Analysis</p>
         # View AI Summary button (if available)
         if self._load_saved_ai_summary(session.session_id):
             view_summary_btn = QPushButton("✨ View AI Summary")
-            view_summary_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #9b59b6;
+            view_summary_btn.setMinimumHeight(32)
+            view_summary_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            view_summary_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #AF52DE;
                     color: white;
                     border: none;
-                    border-radius: 4px;
-                    padding: 6px 12px;
+                    border-radius: 8px;
+                    padding: 6px 14px;
                     font-size: 12px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #8e44ad;
-                }
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background-color: #9F42CE;
+                }}
             """)
             view_summary_btn.setToolTip("View AI-generated session summary")
             view_summary_btn.clicked.connect(lambda: self._on_view_saved_summary(session.session_id))
@@ -5037,36 +5711,42 @@ Historical Trends, Snapshot Analysis</p>
 
         # Show Files button
         show_files_btn = QPushButton("📁 Show Files")
-        show_files_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
+        show_files_btn.setMinimumHeight(32)
+        show_files_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        show_files_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
                 color: white;
                 border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
+                border-radius: 8px;
+                padding: 6px 14px;
                 font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+            }}
         """)
         show_files_btn.clicked.connect(lambda: self._on_show_files(session.session_id))
         action_layout.addWidget(show_files_btn)
 
         # Delete Session button
-        delete_btn = QPushButton("🗑️ Delete Session")
-        delete_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c;
+        delete_btn = QPushButton("🗑️ Delete")
+        delete_btn.setMinimumHeight(32)
+        delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        delete_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_red']};
                 color: white;
                 border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
+                border-radius: 8px;
+                padding: 6px 14px;
                 font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: #E6342B;
+            }}
         """)
         delete_btn.clicked.connect(lambda: self._on_delete_session(session.session_id))
         action_layout.addWidget(delete_btn)
@@ -5147,8 +5827,9 @@ Historical Trends, Snapshot Analysis</p>
                     results_path = self.session_manager.cloud_analysis_manager.retrieve_and_store_results(job_id)
 
                     if results_path:
-                        # Delete cloud videos
-                        self.session_manager.cloud_analysis_manager.delete_cloud_videos(job_id)
+                        # NOTE: Videos are kept on cloud for reuse during regeneration
+                        # User can manually delete them via "Manage Cloud Storage"
+                        # self.session_manager.cloud_analysis_manager.delete_cloud_videos(job_id)
 
                         # Notify user
                         self.ui_queue.put({
@@ -5303,11 +5984,19 @@ Historical Trends, Snapshot Analysis</p>
                 QMessageBox.critical(self, "Error", f"Unknown provider: {job.provider}")
                 return
 
+            # Get theme colors
+            colors = self._get_colors()
+            
             # Create dialog to display results
             dialog = QDialog(self)
             dialog.setWindowTitle(title)
             dialog.setMinimumSize(800, 600)  # Increased size for better readability
             dialog.resize(900, 700)  # Default size
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background-color: {colors['bg_primary']};
+                }}
+            """)
 
             layout = QVBoxLayout(dialog)
 
@@ -5317,21 +6006,27 @@ Historical Trends, Snapshot Analysis</p>
             scroll_area.setFrameShape(QFrame.Shape.NoFrame)
             scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll_area.setStyleSheet(f"""
+                QScrollArea {{
+                    background-color: {colors['bg_primary']};
+                    border: none;
+                }}
+            """)
 
             # Text display with results
             text_display = QTextEdit()
             text_display.setReadOnly(True)
             text_display.setMarkdown(formatted_text)
-            text_display.setStyleSheet("""
-                QTextEdit {
+            text_display.setStyleSheet(f"""
+                QTextEdit {{
                     font-size: 13px;
-                    color: #000000;
-                    background-color: white;
-                    border: 1px solid #bdc3c7;
+                    color: {colors['text_primary']};
+                    background-color: {colors['card_bg']};
+                    border: 1px solid {colors['border']};
                     border-radius: 4px;
                     padding: 10px;
                     line-height: 1.4;
-                }
+                }}
             """)
 
             # Set the text display as the scroll area's widget
@@ -5340,6 +6035,17 @@ Historical Trends, Snapshot Analysis</p>
 
             # Close button
             button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            button_box.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {colors['accent_blue']};
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-weight: 600;
+                    min-width: 80px;
+                }}
+            """)
             button_box.rejected.connect(dialog.reject)
             layout.addWidget(button_box)
 
