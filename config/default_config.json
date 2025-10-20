@@ -5,7 +5,7 @@
   "video_res_profile": "Std",
   "max_parallel_uploads": 3,
   "openai_vision_enabled": true,
-  "openai_vision_model": "gpt-5-nano",
+  "openai_vision_model": "gpt-4.1-nano",
   "openai_vision_detail": "high",
   "K_hysteresis": 3,
   "min_span_minutes": 3.5,

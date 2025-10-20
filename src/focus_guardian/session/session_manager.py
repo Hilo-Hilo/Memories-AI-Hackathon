@@ -162,7 +162,7 @@ class SessionManager:
         if not openai_key:
             raise RuntimeError("OpenAI API key not configured")
 
-        vision_model = self.config.get_config_value("openai_vision_model", "gpt-5-nano")
+        vision_model = self.config.get_config_value("openai_vision_model", "gpt-4.1-nano")
         vision_detail = self.config.get_config_value("openai_vision_detail", "high")
 
         self.vision_client = OpenAIVisionClient(
