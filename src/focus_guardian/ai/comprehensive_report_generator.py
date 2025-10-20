@@ -195,12 +195,18 @@ class ComprehensiveReportGenerator:
         prompt = self._build_comprehensive_prompt(context)
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_completion_tokens=2000,  # Long-form report (GPT-5 uses max_completion_tokens)
-                temperature=0.7 if not self.model.startswith("gpt-5") else None  # GPT-5 doesn't support temperature
-            )
+            # Build API params conditionally based on model
+            api_params = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_completion_tokens": 2000
+            }
+            
+            # Only add temperature for non-GPT-5 models
+            if not self.model.startswith("gpt-5"):
+                api_params["temperature"] = 0.7
+            
+            response = self.client.chat.completions.create(**api_params)
 
             report_text = response.choices[0].message.content
 
