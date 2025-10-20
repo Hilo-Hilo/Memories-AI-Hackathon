@@ -50,7 +50,7 @@ class SnapshotScheduler:
         upload_queue: Queue,
         screen_enabled: bool = True,
         jpeg_quality: int = 85,
-        camera_index: int = -1
+        camera_index: int = 0
     ):
         """
         Initialize snapshot scheduler.
@@ -62,7 +62,7 @@ class SnapshotScheduler:
             upload_queue: Queue to send snapshot pairs for upload
             screen_enabled: Whether to capture screen snapshots
             jpeg_quality: JPEG compression quality (0-100)
-            camera_index: Camera index (-1 = auto-detect, 0+ = specific camera)
+            camera_index: Camera index (0+ for specific camera)
         """
         self.session_id = session_id
         self.interval_sec = interval_sec
@@ -79,7 +79,7 @@ class SnapshotScheduler:
             self.webcam = WebcamCapture(
                 camera_index=camera_index,
                 jpeg_quality=jpeg_quality,
-                prefer_builtin=(camera_index == -1)  # Auto-detect if -1
+                prefer_builtin=False  # Always use specified camera_index (never auto-detect)
             )
             logger.info(f"Webcam capture initialized (camera_index={camera_index})")
         except Exception as e:

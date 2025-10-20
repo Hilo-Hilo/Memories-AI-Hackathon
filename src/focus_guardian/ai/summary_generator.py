@@ -80,7 +80,10 @@ class AISummaryGenerator:
         duration_min = report_data.get("meta", {}).get("total_duration_minutes", 0)
         focus_ratio = report_data.get("kpis", {}).get("focus_ratio", 0) * 100
         num_distractions = report_data.get("kpis", {}).get("num_alerts", 0)
-        num_snapshots = len(report_data.get("segments", [{}])[0].get("snapshot_refs", []))
+        
+        # Safely get snapshot count
+        segments = report_data.get("segments", [])
+        num_snapshots = len(segments[0].get("snapshot_refs", [])) if segments else 0
 
         # Build emotional context
         emotion_summary = ""

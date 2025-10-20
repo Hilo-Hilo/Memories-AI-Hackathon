@@ -644,30 +644,14 @@ class MainWindow(QMainWindow):
         """)
         camera_layout = QFormLayout(camera_group)
 
-        # INFO: Don't enumerate cameras on startup to avoid activating Continuity Camera
-        # User must click "Refresh List" to scan for cameras
-
-        # Camera dropdown - start with only saved config
+        # Camera dropdown - will be populated on first refresh
         self.camera_combo = QComboBox()
-        self.camera_combo.addItem("Auto-detect (FaceTime HD)", -1)
-
-        # Add saved camera from config if it's not auto-detect
-        saved_index = self.config.get_camera_index()
-        saved_name = self.config.get_camera_name()
-        if saved_index != -1:
-            self.camera_combo.addItem(f"{saved_name}", saved_index)
-
-        # Set current selection to saved config
-        combo_index = self.camera_combo.findData(saved_index)
-        if combo_index >= 0:
-            self.camera_combo.setCurrentIndex(combo_index)
-
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         camera_layout.addRow("Camera:", self.camera_combo)
 
         # Instruction label
         instruction_label = QLabel(
-            "Click 'Refresh List' to scan for available cameras"
+            "Detecting available cameras..."
         )
         instruction_label.setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;")
         camera_layout.addRow("", instruction_label)
@@ -908,6 +892,10 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll_area)
 
+        # Auto-refresh camera list on startup to detect available cameras
+        # This ensures we never use -1 (auto-detect) and always have real camera indices
+        QTimer.singleShot(500, self._refresh_camera_list_silent)
+
         return widget
 
     def _on_camera_changed(self, index: int):
@@ -964,17 +952,23 @@ class MainWindow(QMainWindow):
 
             # Clear and repopulate
             self.camera_combo.clear()
-            self.camera_combo.addItem("Auto-detect (FaceTime HD)", -1)
             for cam in cameras:
                 self.camera_combo.addItem(cam["name"], cam["index"])
 
-            # Restore current selection
+            # Restore current selection or default to last camera
             combo_index = self.camera_combo.findData(current_index)
-            if combo_index >= 0:
+            if combo_index >= 0 and current_index != -1:
+                # Restore saved camera if valid and not -1
                 self.camera_combo.setCurrentIndex(combo_index)
             else:
-                # Default to auto-detect if saved camera not found
-                self.camera_combo.setCurrentIndex(0)
+                # Default to last camera (highest index, typically built-in FaceTime)
+                # Use len(cameras)-1 to get the last camera safely
+                last_camera_combo_index = len(cameras) - 1 if cameras else 0
+                self.camera_combo.setCurrentIndex(last_camera_combo_index)
+                # Save the new default
+                if cameras:
+                    last_camera = cameras[-1]
+                    self.config.set_camera_config(last_camera["index"], last_camera["name"])
 
             # Update status
             self.camera_status_label.setText(f"✓ Found {len(cameras)} camera(s)")
@@ -1000,6 +994,67 @@ class MainWindow(QMainWindow):
                 "Camera Refresh Failed",
                 f"Could not scan for cameras: {str(e)}"
             )
+
+    def _refresh_camera_list_silent(self):
+        """
+        Silently refresh camera list on startup without showing popup dialogs.
+        Defaults to last camera (highest index, typically built-in FaceTime).
+        """
+        from ..capture.screen_capture import WebcamCapture
+
+        # Show loading message
+        self.camera_status_label.setText("⏳ Detecting cameras...")
+        self.camera_status_label.setStyleSheet("color: #f39c12; font-size: 13px;")
+
+        try:
+            logger.info("Auto-detecting cameras on startup...")
+            cameras = WebcamCapture.enumerate_cameras()
+
+            logger.info(f"Found {len(cameras)} cameras on startup")
+            for cam in cameras:
+                logger.info(f"  Camera: index={cam['index']}, name={cam['name']}")
+
+            if not cameras:
+                self.camera_status_label.setText("❌ No cameras found")
+                self.camera_status_label.setStyleSheet("color: #e74c3c; font-size: 13px;")
+                return
+
+            # Save current selection
+            current_index = self.config.get_camera_index()
+
+            # Clear and repopulate
+            self.camera_combo.clear()
+            for cam in cameras:
+                self.camera_combo.addItem(cam["name"], cam["index"])
+
+            # Restore current selection or default to last camera
+            combo_index = self.camera_combo.findData(current_index)
+            if combo_index >= 0 and current_index != -1:
+                # Restore saved camera if valid and not -1
+                self.camera_combo.setCurrentIndex(combo_index)
+                logger.info(f"Restored saved camera: index={current_index}")
+            else:
+                # Default to last camera (highest index, typically built-in FaceTime)
+                # Use len(cameras)-1 to get the last camera safely
+                last_camera_combo_index = len(cameras) - 1 if cameras else 0
+                self.camera_combo.setCurrentIndex(last_camera_combo_index)
+                # Save the new default
+                if cameras:
+                    last_camera = cameras[-1]
+                    self.config.set_camera_config(last_camera["index"], last_camera["name"])
+                    logger.info(f"Defaulted to last camera: index={last_camera['index']}, name={last_camera['name']}")
+
+            # Update status
+            selected_camera = self.camera_combo.currentText()
+            self.camera_status_label.setText(f"✓ {selected_camera}")
+            self.camera_status_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+
+            logger.info(f"Camera auto-detection complete: {len(cameras)} camera(s) found")
+
+        except Exception as e:
+            logger.error(f"Failed to auto-detect cameras: {e}", exc_info=True)
+            self.camera_status_label.setText("❌ Detection failed")
+            self.camera_status_label.setStyleSheet("color: #e74c3c; font-size: 13px;")
 
     def _show_camera_preview(self):
         """Show live camera preview window."""
@@ -2845,7 +2900,7 @@ class MainWindow(QMainWindow):
         
         for row, snapshot in enumerate(snapshots):
             # Time
-            time_str = snapshot.captured_at.strftime("%H:%M:%S") if snapshot.captured_at else "N/A"
+            time_str = snapshot.timestamp.strftime("%H:%M:%S") if snapshot.timestamp else "N/A"
             table.setItem(row, 0, QTableWidgetItem(time_str))
             
             # Type
@@ -3083,7 +3138,7 @@ class MainWindow(QMainWindow):
         
         snapshot_pairs = defaultdict(list)
         for snap in snapshots:
-            time_key = snap.captured_at.replace(second=0, microsecond=0) if snap.captured_at else datetime.now()
+            time_key = snap.timestamp.replace(second=0, microsecond=0) if snap.timestamp else datetime.now()
             snapshot_pairs[time_key].append(snap)
         
         for time_key in sorted(snapshot_pairs.keys(), reverse=True):
@@ -3223,7 +3278,7 @@ class MainWindow(QMainWindow):
         
         snapshot_pairs = defaultdict(list)
         for snap in snapshots:
-            time_key = snap.captured_at.replace(second=0, microsecond=0) if snap.captured_at else datetime.now()
+            time_key = snap.timestamp.replace(second=0, microsecond=0) if snap.timestamp else datetime.now()
             snapshot_pairs[time_key].append(snap)
         
         for time_key in sorted(snapshot_pairs.keys(), reverse=True):

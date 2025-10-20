@@ -387,9 +387,9 @@ class Config:
         Get camera index for webcam capture.
 
         Returns:
-            -1 for auto-detect (prefers built-in), 0+ for specific camera
+            Camera index (0+ for specific camera, defaults to 0 on first run)
         """
-        return int(self._get_config_value("camera_index", -1))
+        return int(self._get_config_value("camera_index", 0))
 
     def get_camera_name(self) -> str:
         """Get human-readable camera name."""
@@ -400,7 +400,7 @@ class Config:
         Save camera selection to user config.
 
         Args:
-            camera_index: Camera index (-1 for auto, 0+ for specific)
+            camera_index: Camera index (0+ for specific camera)
             camera_name: Human-readable camera name
         """
         self._user_config["camera_index"] = camera_index
