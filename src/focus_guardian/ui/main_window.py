@@ -22,6 +22,7 @@ from ..session.session_manager import SessionManager
 from ..utils.logger import get_logger
 from ..ai.summary_generator import AISummaryGenerator
 from ..ai.emotion_aware_messaging import EmotionAwareMessenger, EmotionState
+from ..ai.comprehensive_report_generator import ComprehensiveReportGenerator
 
 logger = get_logger(__name__)
 
@@ -92,15 +93,17 @@ class MainWindow(QMainWindow):
         # Initialize AI components
         self.ai_summary_generator = None
         self.emotion_messenger = EmotionAwareMessenger()
+        self.comprehensive_report_generator = None
         
-        # Initialize AI summary generator if API key available
+        # Initialize AI generators if API key available
         openai_key = self.config.get_openai_api_key()
         if openai_key:
             try:
                 self.ai_summary_generator = AISummaryGenerator(openai_key, self.database)
-                logger.info("AI summary generator initialized")
+                self.comprehensive_report_generator = ComprehensiveReportGenerator(openai_key, self.database)
+                logger.info("AI report generators initialized")
             except Exception as e:
-                logger.warning(f"Failed to initialize AI summary generator: {e}")
+                logger.warning(f"Failed to initialize AI generators: {e}")
         
         logger.info("Main window initialized")
     
@@ -1344,16 +1347,8 @@ class MainWindow(QMainWindow):
 
                 # Check if auto-upload is enabled
                 if stopped_session_id:
-                    hume_auto = self.config.is_hume_ai_auto_upload()
-                    memories_auto = self.config.is_memories_ai_auto_upload()
-
-                    if hume_auto or memories_auto:
-                        # Auto-upload enabled - trigger upload with progress UI
-                        logger.info("Auto-upload enabled, triggering cloud upload")
-                        self._auto_upload_session(stopped_session_id, hume_auto, memories_auto)
-                    else:
-                        # No auto-upload - just show summary
-                        self._show_session_summary(stopped_session_id)
+                    # Show upload prompt instead of immediate summary
+                    self._prompt_for_cloud_upload(stopped_session_id)
             except Exception as e:
                 logger.error(f"Failed to stop session: {e}", exc_info=True)
     
@@ -1821,6 +1816,305 @@ class MainWindow(QMainWindow):
                 self,
                 "Error",
                 f"Failed to load AI summary:\n\n{str(e)}"
+            )
+    
+    def _prompt_for_cloud_upload(self, session_id: str):
+        """Prompt user to upload session for AI analysis after session ends."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+        
+        # Get session
+        session = self.database.get_session(session_id)
+        if not session:
+            return
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Session Complete")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Header
+        header = QLabel(f"<h2>Session Complete: {session.task_name}</h2>")
+        header.setStyleSheet("color: #2c3e50;")
+        layout.addWidget(header)
+        
+        # Basic stats
+        duration = (session.ended_at - session.started_at).total_seconds() / 60 if session.ended_at else 0
+        stats_label = QLabel(f"""<div style="color: #2c3e50; background-color: #f8f9fa; padding: 15px; border-radius: 6px;">
+<p><b>Duration:</b> {duration:.0f} minutes</p>
+<p><b>Task:</b> {session.task_name}</p>
+<p>Basic session report has been saved.</p>
+</div>""")
+        stats_label.setWordWrap(True)
+        stats_label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(stats_label)
+        
+        # Cloud upload offer
+        if self.config.is_cloud_features_enabled():
+            offer_label = QLabel("""<div style="background-color: #e8f5e9; padding: 15px; border-radius: 6px; margin-top: 15px;">
+<h3 style="color: #27ae60; margin-top: 0;">✨ Want AI-Powered Insights?</h3>
+<p style="color: #2c3e50;">Upload your session for comprehensive AI analysis:</p>
+<ul style="color: #2c3e50;">
+    <li><b>Hume AI:</b> Emotion timeline analysis</li>
+    <li><b>Memories.ai:</b> Pattern detection & insights</li>
+    <li><b>GPT-4:</b> Comprehensive report with historical trends</li>
+</ul>
+<p style="color: #7f8c8d; font-size: 12px;">Processing time: 5-10 minutes | Estimated cost: ~$0.15</p>
+</div>""")
+            offer_label.setWordWrap(True)
+            offer_label.setTextFormat(Qt.TextFormat.RichText)
+            layout.addWidget(offer_label)
+            
+            # Upload button
+            upload_btn = QPushButton("☁️ Yes, Upload for AI Analysis")
+            upload_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #27ae60;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 12px 24px;
+                    font-size: 14px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #229954;
+                }
+            """)
+            upload_btn.clicked.connect(lambda: self._handle_upload_and_close(dialog, session_id))
+            layout.addWidget(upload_btn)
+            
+            # Skip button
+            skip_btn = QPushButton("Skip - View Basic Report")
+            skip_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #95a5a6;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 12px 24px;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background-color: #7f8c8d;
+                }
+            """)
+            skip_btn.clicked.connect(lambda: self._handle_skip_and_close(dialog, session_id))
+            layout.addWidget(skip_btn)
+        else:
+            # Cloud features disabled
+            close_btn = QPushButton("OK")
+            close_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #3498db;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 12px 24px;
+                    font-size: 14px;
+                }
+            """)
+            close_btn.clicked.connect(dialog.accept)
+            layout.addWidget(close_btn)
+        
+        dialog.exec()
+    
+    def _handle_upload_and_close(self, dialog, session_id: str):
+        """Handle upload request and close dialog."""
+        dialog.accept()
+        
+        # Trigger upload
+        run_hume = self.config.is_hume_ai_enabled()
+        run_memories = self.config.is_memories_ai_enabled()
+        
+        if run_hume or run_memories:
+            self._on_upload_to_cloud(session_id)
+            
+            # Show info message
+            QMessageBox.information(
+                self,
+                "Upload Started",
+                "Session uploaded to cloud for AI analysis.\n\n"
+                "Check the Reports tab in 5-10 minutes.\n"
+                "A '🤖 Generate AI Report' button will appear when ready."
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "No Providers Enabled",
+                "Please enable Hume AI and/or Memories.ai in Settings first."
+            )
+    
+    def _handle_skip_and_close(self, dialog, session_id: str):
+        """Handle skip upload - just close dialog."""
+        dialog.accept()
+        # Don't show summary - user can access it from Reports tab
+        logger.info("User skipped cloud upload")
+    
+    def _on_generate_comprehensive_report(self, session_id: str):
+        """Generate comprehensive AI report using all available data."""
+        if not self.comprehensive_report_generator:
+            QMessageBox.warning(
+                self,
+                "AI Not Available",
+                "Comprehensive AI report generation requires an OpenAI API key."
+            )
+            return
+        
+        import threading
+        from PyQt6.QtWidgets import QProgressDialog
+        
+        # Show progress dialog
+        progress = QProgressDialog(
+            "Generating comprehensive AI report...\n\n"
+            "This combines Hume AI emotions, Memories.ai patterns,\n"
+            "historical trends, and GPT-4 analysis.\n\n"
+            "This may take 10-30 seconds.",
+            None,
+            0,
+            0,
+            self
+        )
+        progress.setWindowTitle("AI Report Generation")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setCancelButton(None)
+        progress.show()
+        
+        def generate_worker():
+            try:
+                # Load Hume AI results
+                hume_results = None
+                hume_jobs = [j for j in self.database.get_cloud_jobs_for_session(session_id) if j.provider.value == "hume_ai"]
+                if hume_jobs and hume_jobs[0].results_file_path:
+                    with open(hume_jobs[0].results_file_path, 'r') as f:
+                        hume_results = json.load(f)
+                
+                # Load Memories.ai results
+                memories_results = None
+                memories_jobs = [j for j in self.database.get_cloud_jobs_for_session(session_id) if j.provider.value == "memories_ai"]
+                if memories_jobs and memories_jobs[0].results_file_path:
+                    with open(memories_jobs[0].results_file_path, 'r') as f:
+                        memories_results = json.load(f)
+                
+                # Generate comprehensive report
+                report = self.comprehensive_report_generator.generate_comprehensive_report(
+                    session_id=session_id,
+                    hume_results=hume_results,
+                    memories_results=memories_results
+                )
+                
+                # Save report
+                self.comprehensive_report_generator.save_comprehensive_report(session_id, report)
+                
+                # Close progress and show report
+                def on_complete():
+                    progress.close()
+                    progress.deleteLater()
+                    self._on_view_comprehensive_report(session_id)
+                    self._load_sessions_list()  # Refresh to show new button
+                
+                QTimer.singleShot(0, on_complete)
+                
+            except Exception as e:
+                logger.error(f"Failed to generate comprehensive report: {e}", exc_info=True)
+                
+                def on_error():
+                    progress.close()
+                    progress.deleteLater()
+                    QMessageBox.critical(
+                        self,
+                        "Report Generation Failed",
+                        f"Failed to generate AI report:\n\n{str(e)}"
+                    )
+                
+                QTimer.singleShot(0, on_error)
+        
+        thread = threading.Thread(target=generate_worker, daemon=True)
+        thread.start()
+    
+    def _on_view_comprehensive_report(self, session_id: str):
+        """View comprehensive AI report for a session."""
+        try:
+            import json
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QScrollArea, QFrame
+            
+            # Load report
+            report_path = self.config.get_data_dir() / f"sessions/{session_id}/comprehensive_ai_report.json"
+            
+            if not report_path.exists():
+                QMessageBox.warning(
+                    self,
+                    "Report Not Available",
+                    "Comprehensive AI report has not been generated yet.\n\n"
+                    "Click '🤖 Generate Comprehensive AI Report' to create it."
+                )
+                return
+            
+            with open(report_path, 'r') as f:
+                report_data = json.load(f)
+            
+            # Get session for title
+            session = self.database.get_session(session_id)
+            task_name = session.task_name if session else "Unknown"
+            
+            # Create dialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"📊 Comprehensive AI Report - {task_name}")
+            dialog.setMinimumSize(900, 700)
+            dialog.resize(1000, 800)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Header
+            header_text = f"""<div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+<p style="margin: 0; color: #7f8c8d; font-size: 12px;">Generated: {report_data.get('generated_at', 'Unknown')}</p>
+<p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 12px;">
+Data Sources: {'Hume AI, ' if report_data.get('data_sources', {}).get('hume_ai') else ''}
+{'Memories.ai, ' if report_data.get('data_sources', {}).get('memories_ai') else ''}
+Historical Trends, Snapshot Analysis</p>
+</div>"""
+            
+            header = QLabel(header_text)
+            header.setTextFormat(Qt.TextFormat.RichText)
+            layout.addWidget(header)
+            
+            # Scroll area
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+            
+            # Text display
+            text_display = QTextEdit()
+            text_display.setReadOnly(True)
+            text_display.setMarkdown(report_data.get('report_text', 'No report content'))
+            text_display.setStyleSheet("""
+                QTextEdit {
+                    font-size: 14px;
+                    color: #2c3e50;
+                    background-color: white;
+                    border: none;
+                    padding: 20px;
+                    line-height: 1.8;
+                }
+            """)
+            
+            scroll_area.setWidget(text_display)
+            layout.addWidget(scroll_area)
+            
+            # Buttons
+            button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            button_box.accepted.connect(dialog.accept)
+            layout.addWidget(button_box)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Failed to show comprehensive report: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to load comprehensive AI report:\n\n{str(e)}"
             )
     
     def _show_about(self):
@@ -3655,6 +3949,57 @@ class MainWindow(QMainWindow):
                     details_btn.clicked.connect(lambda checked, jid=job.job_id: self._on_show_cloud_details(jid))
                     layout.addWidget(details_btn, row, 1)
 
+                row += 1
+
+        # Check if both Hume and Memories are complete - show Generate AI Report button
+        hume_complete = any(job.provider.value == "hume_ai" and job.status == CloudJobStatus.COMPLETED for job in cloud_jobs)
+        memories_complete = any(job.provider.value == "memories_ai" and job.status == CloudJobStatus.COMPLETED for job in cloud_jobs)
+        
+        if hume_complete and memories_complete:
+            # Check if comprehensive report already generated
+            comprehensive_report_path = self.config.get_data_dir() / f"sessions/{session.session_id}/comprehensive_ai_report.json"
+            
+            if comprehensive_report_path.exists():
+                # Report already generated - show view button
+                view_comprehensive_btn = QPushButton("📊 View Comprehensive AI Report")
+                view_comprehensive_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #8e44ad;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 8px 16px;
+                        font-size: 13px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #7d3c98;
+                    }
+                """)
+                view_comprehensive_btn.setToolTip("View full AI-generated report with historical trends")
+                view_comprehensive_btn.clicked.connect(lambda: self._on_view_comprehensive_report(session.session_id))
+                layout.addWidget(view_comprehensive_btn, row, 0, 1, 2)
+                row += 1
+            else:
+                # Can generate report - show generate button
+                generate_btn = QPushButton("🤖 Generate Comprehensive AI Report")
+                generate_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e67e22;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 8px 16px;
+                        font-size: 13px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #d35400;
+                    }
+                """)
+                generate_btn.setToolTip("Generate long-form AI report using Hume AI, Memories.ai, and historical data")
+                generate_btn.clicked.connect(lambda: self._on_generate_comprehensive_report(session.session_id))
+                layout.addWidget(generate_btn, row, 0, 1, 2)
                 row += 1
 
         # Action buttons row
