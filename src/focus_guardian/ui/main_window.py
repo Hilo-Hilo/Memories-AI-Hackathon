@@ -473,10 +473,6 @@ class MainWindow(QMainWindow):
         """)
         stats_layout.addWidget(self.focus_progress_bar)
         
-        # Third row: Cost estimate
-        self.cost_label = QLabel("💰 Estimated cost: $0.00")
-        self.cost_label.setStyleSheet("font-size: 12px; color: #95a5a6; margin-top: 5px;")
-        stats_layout.addWidget(self.cost_label)
         
         layout.addWidget(stats_widget)
         
@@ -1415,10 +1411,6 @@ class MainWindow(QMainWindow):
                 }}
             """)
             
-            # Calculate estimated cost based on snapshots
-            # Cost: ~$0.01 per snapshot (cam + screen) with gpt-5-nano high detail
-            estimated_cost = snapshots * 2 * 0.055  # 2 images per snapshot, $0.055 each
-            self.cost_label.setText(f"💰 Estimated cost: ${estimated_cost:.2f}")
             
         except Exception as e:
             logger.error(f"Failed to update stats: {e}")
@@ -1862,7 +1854,7 @@ class MainWindow(QMainWindow):
     <li><b>Memories.ai:</b> Pattern detection & insights</li>
     <li><b>GPT-4:</b> Comprehensive report with historical trends</li>
 </ul>
-<p style="color: #7f8c8d; font-size: 12px;">Processing time: 5-10 minutes | Estimated cost: ~$0.15</p>
+<p style="color: #7f8c8d; font-size: 12px;">Processing time: 5-10 minutes</p>
 </div>""")
             offer_label.setWordWrap(True)
             offer_label.setTextFormat(Qt.TextFormat.RichText)
@@ -1976,6 +1968,7 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"🤖 Generating comprehensive AI report in background...", 5000)
         
         def generate_worker():
+            import json  # Ensure json is available in nested function scope
             try:
                 logger.info(f"Starting comprehensive report generation for {session_id}")
                 
@@ -2688,16 +2681,13 @@ Historical Trends, Snapshot Analysis</p>
         if run_memories:
             providers.append("Memories.ai (pattern analysis)")
 
-        # Calculate estimated cost
-        cost_estimate = self._calculate_cloud_cost(session, run_hume, run_memories)
-
         # Show confirmation dialog
         reply = QMessageBox.question(
             self,
             "Upload to Cloud",
             f"Upload session videos to:\n\n" +
             "\n".join(f"  • {p}" for p in providers) +
-            f"\n\nEstimated cost: {cost_estimate}\n\nProceed?",
+            f"\n\nProcessing time: 5-10 minutes\n\nProceed?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
@@ -3248,14 +3238,10 @@ Historical Trends, Snapshot Analysis</p>
             return
         
         # Show confirmation
-        cost_per_session = 0.15  # Rough estimate
-        total_cost = len(uploadable_sessions) * cost_per_session
-        
         reply = QMessageBox.question(
             self,
             "Batch Upload Sessions",
             f"Upload {len(uploadable_sessions)} session(s) to cloud for analysis?\n\n"
-            f"Estimated total cost: ${total_cost:.2f}\n"
             f"Processing time: 5-10 minutes per session\n\n"
             "This will upload to all enabled providers (Hume AI and/or Memories.ai).",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
@@ -3837,13 +3823,10 @@ Historical Trends, Snapshot Analysis</p>
                     }
                 """)
                 
-                # Add tooltip with cost estimate
-                duration_sec = (session.ended_at - session.started_at).total_seconds() if session.ended_at else 0
-                cost_estimate = (duration_sec / 120) * 2 * 0.055  # Rough estimate
+                # Add tooltip
                 upload_btn.setToolTip(
-                    f"Upload videos for cloud analysis\n"
-                    f"Estimated cost: ${cost_estimate:.2f}\n"
-                    f"Processing time: 5-10 minutes"
+                    "Upload videos for cloud analysis\n"
+                    "Processing time: 5-10 minutes"
                 )
                 
                 upload_btn.clicked.connect(lambda: self._on_upload_to_cloud(session.session_id))
@@ -4092,51 +4075,6 @@ Historical Trends, Snapshot Analysis</p>
         duration = session.ended_at - session.started_at
         minutes = int(duration.total_seconds() / 60)
         return f"{minutes} min"
-
-    def _calculate_cloud_cost(self, session, run_hume: bool, run_memories: bool) -> str:
-        """
-        Calculate estimated cloud analysis cost based on session duration.
-
-        Args:
-            session: Session object
-            run_hume: Whether Hume AI will be used
-            run_memories: Whether Memories.ai will be used
-
-        Returns:
-            Cost estimate string (e.g., "$1.50-$3.00")
-        """
-        if not session.ended_at:
-            return "~$0.50+"  # In-progress session
-
-        # Calculate duration in minutes
-        duration = session.ended_at - session.started_at
-        minutes = duration.total_seconds() / 60
-
-        # Pricing per minute (estimated)
-        HUME_COST_PER_MIN = 0.20
-        MEMORIES_COST_PER_MIN = 0.40
-        MINIMUM_COST = 0.50
-
-        # Calculate base costs
-        hume_cost = (minutes * HUME_COST_PER_MIN) if run_hume else 0
-        memories_cost = (minutes * MEMORIES_COST_PER_MIN) if run_memories else 0
-        total_cost = hume_cost + memories_cost
-
-        # Apply minimum
-        total_cost = max(total_cost, MINIMUM_COST)
-
-        # Format cost string
-        if minutes < 2:
-            # Very short session - show flat minimum
-            return f"~${MINIMUM_COST:.2f}"
-        elif minutes < 5:
-            # Short session - show approximate cost
-            return f"~${total_cost:.2f}"
-        else:
-            # Longer session - show range (±20%)
-            low_estimate = total_cost * 0.8
-            high_estimate = total_cost * 1.2
-            return f"${low_estimate:.2f}-${high_estimate:.2f}"
 
     def _get_status_badge(self, status) -> str:
         """Get enhanced status badge with icons and colors."""
