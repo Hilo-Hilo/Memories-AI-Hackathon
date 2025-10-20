@@ -239,9 +239,10 @@ Return as JSON:
                 raise VisionAPIError("Failed to encode image to base64")
 
             # Call OpenAI Vision API with enhanced error handling
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            # Note: gpt-5-nano only supports temperature=1 (default)
+            api_params = {
+                "model": self.model,
+                "messages": [
                     {
                         "role": "user",
                         "content": [
@@ -256,10 +257,15 @@ Return as JSON:
                         ]
                     }
                 ],
-                max_completion_tokens=300,  # Changed from max_tokens for newer models (gpt-5-nano, gpt-4o-mini)
-                temperature=0.1,  # Low temperature for consistent classifications
-                timeout=self.timeout_sec
-            )
+                "max_completion_tokens": 300,  # Changed from max_tokens for newer models (gpt-5-nano, gpt-4o-mini)
+                "timeout": self.timeout_sec
+            }
+            
+            # Only add temperature for models that support it (not gpt-5-nano)
+            if "gpt-5-nano" not in self.model:
+                api_params["temperature"] = 0.1  # Low temperature for consistent classifications
+            
+            response = self.client.chat.completions.create(**api_params)
 
             # Validate response structure
             if not response or not response.choices:
