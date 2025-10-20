@@ -606,12 +606,51 @@ class MainWindow(QMainWindow):
         return widget
     
     def _create_settings_tab(self) -> QWidget:
-        """Create settings tab for configuration."""
-        from PyQt6.QtWidgets import QComboBox, QGroupBox, QFormLayout, QScrollArea, QFrame
+        """Create settings tab with General and Developer Options subtabs."""
+        from PyQt6.QtWidgets import QComboBox, QGroupBox, QFormLayout, QScrollArea, QFrame, QTabWidget
         from ..capture.screen_capture import WebcamCapture
 
         # Create main widget
         widget = QWidget()
+        main_layout = QVBoxLayout(widget)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Header with developer mode toggle
+        header_layout = QHBoxLayout()
+
+        label = QLabel("Settings")
+        label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        header_layout.addWidget(label)
+        
+        header_layout.addStretch()
+        
+        # Developer mode toggle
+        self.developer_mode_checkbox = QCheckBox("🔧 Enable Developer Options")
+        self.developer_mode_checkbox.setStyleSheet("font-size: 13px; font-weight: bold; color: #e67e22;")
+        self.developer_mode_checkbox.stateChanged.connect(self._toggle_developer_mode)
+        header_layout.addWidget(self.developer_mode_checkbox)
+        
+        main_layout.addLayout(header_layout)
+
+        # Create tab widget for General vs Developer settings
+        self.settings_tabs = QTabWidget()
+        main_layout.addWidget(self.settings_tabs)
+
+        # General Settings tab (existing settings)
+        general_tab = self._create_general_settings_widget()
+        self.settings_tabs.addTab(general_tab, "General Settings")
+
+        # Developer Options tab (new)
+        self.developer_tab = self._create_developer_options_widget()
+        self.settings_tabs.addTab(self.developer_tab, "Developer Options")
+        self.settings_tabs.setTabEnabled(1, False)  # Hidden by default
+
+        return widget
+    
+    def _create_general_settings_widget(self) -> QWidget:
+        """Create the general settings widget (existing settings content)."""
+        from PyQt6.QtWidgets import QComboBox, QGroupBox, QFormLayout, QScrollArea, QFrame
+        from ..capture.screen_capture import WebcamCapture
 
         # Create scroll area for the entire settings content
         scroll_area = QScrollArea()
@@ -624,10 +663,6 @@ class MainWindow(QMainWindow):
         scroll_widget = QWidget()
         layout = QVBoxLayout(scroll_widget)
         layout.setSpacing(20)
-
-        label = QLabel("Settings")
-        label.setStyleSheet("font-size: 20px; font-weight: bold;")
-        layout.addWidget(label)
 
         # Camera Selection section
         camera_group = QGroupBox("Webcam Selection")
@@ -891,16 +926,280 @@ class MainWindow(QMainWindow):
         # Set the scroll widget as the scroll area's widget
         scroll_area.setWidget(scroll_widget)
 
-        # Create main layout for the tab widget
-        main_layout = QVBoxLayout(widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll_area)
-
         # Auto-refresh camera list on startup to detect available cameras
         # This ensures we never use -1 (auto-detect) and always have real camera indices
         QTimer.singleShot(500, self._refresh_camera_list_silent)
 
-        return widget
+        return scroll_area
+    
+    def _create_developer_options_widget(self) -> QWidget:
+        """Create developer options widget for prompt editing."""
+        from PyQt6.QtWidgets import QScrollArea, QFrame, QGroupBox, QTextEdit, QFormLayout
+        
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        
+        # Scrollable content
+        scroll_widget = QWidget()
+        layout = QVBoxLayout(scroll_widget)
+        layout.setSpacing(20)
+        
+        # Warning banner
+        warning_label = QLabel(
+            "⚠️ Developer Options - Advanced Settings\n\n"
+            "Modifying prompts changes how AI analyzes your sessions. "
+            "Changes take effect immediately for new operations."
+        )
+        warning_label.setStyleSheet("""
+            QLabel {
+                background-color: #fff3cd;
+                color: #856404;
+                padding: 15px;
+                border-radius: 6px;
+                border-left: 4px solid #ffc107;
+                font-size: 12px;
+            }
+        """)
+        warning_label.setWordWrap(True)
+        layout.addWidget(warning_label)
+        
+        # Section 1: Snapshot Vision Prompts
+        vision_group = self._create_snapshot_prompts_section()
+        layout.addWidget(vision_group)
+        
+        # Section 2: Memories.ai Prompt
+        memories_group = self._create_memories_prompt_section()
+        layout.addWidget(memories_group)
+        
+        # Section 3: Comprehensive Report Template
+        comprehensive_group = self._create_comprehensive_prompt_section()
+        layout.addWidget(comprehensive_group)
+        
+        # Section 4: Snapshot Debugging
+        debug_group = self._create_snapshot_debug_section()
+        layout.addWidget(debug_group)
+        
+        layout.addStretch()
+        
+        scroll_area.setWidget(scroll_widget)
+        return scroll_area
+    
+    def _toggle_developer_mode(self, state):
+        """Toggle developer options tab visibility."""
+        enabled = (state == Qt.CheckState.Checked.value)
+        self.settings_tabs.setTabEnabled(1, enabled)
+        
+        if enabled:
+            self.settings_tabs.setCurrentIndex(1)  # Switch to developer tab
+            logger.info("Developer options enabled")
+        else:
+            self.settings_tabs.setCurrentIndex(0)  # Switch back to general
+            logger.info("Developer options disabled")
+    
+    def _create_snapshot_prompts_section(self) -> QWidget:
+        """Create snapshot vision prompts editing section."""
+        from PyQt6.QtWidgets import QGroupBox, QTextEdit, QFormLayout
+        
+        group = QGroupBox("Snapshot Vision Prompts")
+        group.setStyleSheet("""
+            QGroupBox {
+                font-size: 15px;
+                font-weight: bold;
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        
+        layout = QVBoxLayout(group)
+        
+        # Camera prompt editor
+        cam_label = QLabel("Camera Snapshot Prompt:")
+        cam_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        layout.addWidget(cam_label)
+        
+        self.cam_prompt_edit = QTextEdit()
+        self.cam_prompt_edit.setPlainText(self.config.get_custom_prompt("cam_snapshot") or self._get_default_cam_prompt())
+        self.cam_prompt_edit.setMinimumHeight(200)
+        self.cam_prompt_edit.setStyleSheet("font-family: 'Courier New', monospace; font-size: 11px;")
+        layout.addWidget(self.cam_prompt_edit)
+        
+        cam_btn_layout = QHBoxLayout()
+        save_cam_btn = QPushButton("💾 Save Camera Prompt")
+        save_cam_btn.clicked.connect(self._save_cam_prompt)
+        cam_btn_layout.addWidget(save_cam_btn)
+        
+        reset_cam_btn = QPushButton("🔄 Reset to Default")
+        reset_cam_btn.clicked.connect(self._reset_cam_prompt)
+        cam_btn_layout.addWidget(reset_cam_btn)
+        cam_btn_layout.addStretch()
+        layout.addLayout(cam_btn_layout)
+        
+        # Screen prompt editor
+        screen_label = QLabel("Screen Snapshot Prompt:")
+        screen_label.setStyleSheet("font-weight: bold; margin-top: 15px;")
+        layout.addWidget(screen_label)
+        
+        self.screen_prompt_edit = QTextEdit()
+        self.screen_prompt_edit.setPlainText(self.config.get_custom_prompt("screen_snapshot") or self._get_default_screen_prompt())
+        self.screen_prompt_edit.setMinimumHeight(250)
+        self.screen_prompt_edit.setStyleSheet("font-family: 'Courier New', monospace; font-size: 11px;")
+        layout.addWidget(self.screen_prompt_edit)
+        
+        screen_btn_layout = QHBoxLayout()
+        save_screen_btn = QPushButton("💾 Save Screen Prompt")
+        save_screen_btn.clicked.connect(self._save_screen_prompt)
+        screen_btn_layout.addWidget(save_screen_btn)
+        
+        reset_screen_btn = QPushButton("🔄 Reset to Default")
+        reset_screen_btn.clicked.connect(self._reset_screen_prompt)
+        screen_btn_layout.addWidget(reset_screen_btn)
+        screen_btn_layout.addStretch()
+        layout.addLayout(screen_btn_layout)
+        
+        return group
+    
+    def _create_memories_prompt_section(self) -> QWidget:
+        """Create Memories.ai prompt editing section."""
+        from PyQt6.QtWidgets import QGroupBox, QTextEdit
+        
+        group = QGroupBox("Memories.ai Analysis Prompt")
+        group.setStyleSheet("""
+            QGroupBox {
+                font-size: 15px;
+                font-weight: bold;
+                border: 2px solid #9b59b6;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        
+        layout = QVBoxLayout(group)
+        
+        desc_label = QLabel("This prompt is sent to Memories.ai for video analysis:")
+        desc_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        layout.addWidget(desc_label)
+        
+        self.memories_prompt_edit = QTextEdit()
+        self.memories_prompt_edit.setPlainText(self.config.get_custom_prompt("memories_analysis") or self._get_default_memories_prompt())
+        self.memories_prompt_edit.setMinimumHeight(300)
+        self.memories_prompt_edit.setStyleSheet("font-family: 'Courier New', monospace; font-size: 11px;")
+        layout.addWidget(self.memories_prompt_edit)
+        
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("💾 Save Memories.ai Prompt")
+        save_btn.clicked.connect(self._save_memories_prompt)
+        btn_layout.addWidget(save_btn)
+        
+        reset_btn = QPushButton("🔄 Reset to Default")
+        reset_btn.clicked.connect(self._reset_memories_prompt)
+        btn_layout.addWidget(reset_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        return group
+    
+    def _create_comprehensive_prompt_section(self) -> QWidget:
+        """Create comprehensive report template editing section."""
+        from PyQt6.QtWidgets import QGroupBox, QTextEdit
+        
+        group = QGroupBox("Comprehensive AI Report Template")
+        group.setStyleSheet("""
+            QGroupBox {
+                font-size: 15px;
+                font-weight: bold;
+                border: 2px solid #e67e22;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        
+        layout = QVBoxLayout(group)
+        
+        desc_label = QLabel("Template for generating comprehensive reports (uses GPT-4):")
+        desc_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        layout.addWidget(desc_label)
+        
+        self.comprehensive_prompt_edit = QTextEdit()
+        self.comprehensive_prompt_edit.setPlainText(self.config.get_custom_prompt("comprehensive_report") or self._get_default_comprehensive_prompt())
+        self.comprehensive_prompt_edit.setMinimumHeight(300)
+        self.comprehensive_prompt_edit.setStyleSheet("font-family: 'Courier New', monospace; font-size: 11px;")
+        layout.addWidget(self.comprehensive_prompt_edit)
+        
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("💾 Save Report Template")
+        save_btn.clicked.connect(self._save_comprehensive_prompt)
+        btn_layout.addWidget(save_btn)
+        
+        reset_btn = QPushButton("🔄 Reset to Default")
+        reset_btn.clicked.connect(self._reset_comprehensive_prompt)
+        btn_layout.addWidget(reset_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        return group
+    
+    def _create_snapshot_debug_section(self) -> QWidget:
+        """Create snapshot debugging section."""
+        from PyQt6.QtWidgets import QGroupBox
+        
+        group = QGroupBox("Snapshot Debugging")
+        group.setStyleSheet("""
+            QGroupBox {
+                font-size: 15px;
+                font-weight: bold;
+                border: 2px solid #95a5a6;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        
+        layout = QVBoxLayout(group)
+        
+        desc_label = QLabel("View raw snapshot analysis data and JSON schemas:")
+        desc_label.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        layout.addWidget(desc_label)
+        
+        btn_layout = QHBoxLayout()
+        
+        view_snapshot_btn = QPushButton("🔍 View Last Snapshot Analysis")
+        view_snapshot_btn.clicked.connect(self._view_last_snapshot_analysis)
+        btn_layout.addWidget(view_snapshot_btn)
+        
+        export_schema_btn = QPushButton("📄 Export JSON Schema")
+        export_schema_btn.clicked.connect(self._export_snapshot_schema)
+        btn_layout.addWidget(export_schema_btn)
+        
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        return group
 
     def _on_camera_changed(self, index: int):
         """Handle camera selection change."""
