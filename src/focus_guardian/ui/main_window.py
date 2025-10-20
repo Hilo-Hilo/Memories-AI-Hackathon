@@ -2017,6 +2017,9 @@ class MainWindow(QMainWindow):
                         "AI Report Ready",
                         "Comprehensive AI report generated! Click to view insights."
                     )
+                    
+                    # Auto-open the report after generation
+                    self._on_view_comprehensive_report(session_id)
                 
                 QTimer.singleShot(0, on_complete)
                 
@@ -2191,7 +2194,16 @@ Historical Trends, Snapshot Analysis</p>
     def _regenerate_and_close(self, dialog, session_id: str):
         """Regenerate comprehensive report and close dialog."""
         dialog.accept()  # Close the view dialog
-        self._on_regenerate_comprehensive_only(session_id)  # Trigger regeneration
+        
+        # Show immediate feedback
+        self.status_bar.showMessage("🔄 Regenerating comprehensive AI report...", 3000)
+        
+        # Mark as generating
+        self.generating_reports.add(session_id)
+        self._load_sessions_list()
+        
+        # Trigger regeneration (which will auto-open when complete)
+        self._trigger_comprehensive_regen_with_autoopen(session_id)
     
     def _show_desktop_notification(self, title: str, message: str):
         """Show desktop notification using system tray."""
@@ -2333,6 +2345,11 @@ Historical Trends, Snapshot Analysis</p>
     def _on_regenerate_comprehensive_only(self, session_id: str):
         """Regenerate comprehensive AI report using latest Hume/Memories data."""
         # Just trigger normal generation - it will archive old and create new
+        self._on_generate_comprehensive_report(session_id)
+    
+    def _trigger_comprehensive_regen_with_autoopen(self, session_id: str):
+        """Trigger comprehensive report regeneration (same as _on_generate_comprehensive_report)."""
+        # This is just an alias - both do the same thing (auto-open on complete)
         self._on_generate_comprehensive_report(session_id)
     
     def _archive_old_cloud_results(self, session_id: str, hume_only: bool = False, memories_only: bool = False):
