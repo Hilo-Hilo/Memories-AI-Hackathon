@@ -2018,8 +2018,22 @@ class MainWindow(QMainWindow):
                         "Comprehensive AI report generated! Click to view insights."
                     )
                     
-                    # Auto-open the report after generation
-                    self._on_view_comprehensive_report(session_id)
+                    # Auto-open the report after generation (with small delay to ensure file is written)
+                    def delayed_open():
+                        logger.info(f"Auto-opening comprehensive report for {session_id}")
+                        try:
+                            self._on_view_comprehensive_report(session_id)
+                        except Exception as view_error:
+                            logger.error(f"Failed to auto-open report: {view_error}", exc_info=True)
+                            # Show fallback message if auto-open fails
+                            QMessageBox.information(
+                                self,
+                                "Report Generated",
+                                "Comprehensive AI report generated!\n\n"
+                                "Click the purple '📊 View Comprehensive AI Report' button to see it."
+                            )
+                    
+                    QTimer.singleShot(500, delayed_open)  # 500ms delay to ensure file is written
                 
                 QTimer.singleShot(0, on_complete)
                 
