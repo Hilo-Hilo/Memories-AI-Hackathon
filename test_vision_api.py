@@ -71,6 +71,34 @@ Return ONLY a JSON object in this format:
 }"""
 
 try:
+    # Test 1: Minimal parameters
+    print("Test 1: Minimal parameters (no response_format)...")
+    response = client.chat.completions.create(
+        model="gpt-5-nano",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}",
+                            "detail": "high"
+                        }
+                    }
+                ]
+            }
+        ],
+        max_completion_tokens=300
+    )
+    
+    print("\n✓ Test 1 successful!")
+    print(f"Response: {response.choices[0].message.content}")
+    print("\n" + "="*60)
+    
+    # Test 2: With response_format
+    print("\nTest 2: With response_format json_object...")
     response = client.chat.completions.create(
         model="gpt-5-nano",
         messages=[
@@ -89,8 +117,7 @@ try:
             }
         ],
         max_completion_tokens=300,
-        response_format={"type": "json_object"}  # Force JSON output
-        # Note: NOT setting temperature - gpt-5-nano only supports default (1)
+        response_format={"type": "json_object"}
     )
     
     print("\n✓ API call successful!")

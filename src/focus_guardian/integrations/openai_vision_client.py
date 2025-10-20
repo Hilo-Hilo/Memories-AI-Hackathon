@@ -64,10 +64,13 @@ class OpenAIVisionClient:
         Args:
             api_key: OpenAI API key
             timeout_sec: Request timeout in seconds
-            model: Model to use (gpt-4o-mini recommended - gpt-5-nano has empty response bugs)
-                   Options: gpt-4o-mini ($0.165/image) - RECOMMENDED
-                            gpt-5-nano ($0.055/image) - BROKEN (returns empty responses)
-                   Uses response_format for reliable structured JSON output
+            model: Model to use
+                   MUST USE: gpt-4o-mini ($0.165/image) - REQUIRED for base64 images
+                   CANNOT USE: gpt-5-nano ($0.055/image) - Does NOT support base64 encoded images
+                   
+                   gpt-5-nano limitation: Only works with public image URLs (not base64)
+                   Since we need base64 for privacy, we must use gpt-4o-mini
+                   
             detail: Image detail level - "low" (85 tokens) or "high" (1100 tokens)
                    gpt-4o-mini pricing: low=$0.0025/image, high=$0.165/image
                    High detail recommended for better accuracy with 120s intervals.
