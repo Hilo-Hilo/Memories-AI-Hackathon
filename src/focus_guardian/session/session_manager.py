@@ -168,7 +168,8 @@ class SessionManager:
         self.vision_client = OpenAIVisionClient(
             api_key=openai_key,
             model=vision_model,
-            detail=vision_detail
+            detail=vision_detail,
+            config=self.config  # Pass config for custom prompts
         )
         
         # Get camera config (used by both recorder and scheduler)

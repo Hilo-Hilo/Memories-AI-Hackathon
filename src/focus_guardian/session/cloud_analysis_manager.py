@@ -531,6 +531,13 @@ class CloudAnalysisManager:
 
     def _build_memories_analysis_prompt(self) -> str:
         """Build comprehensive Markdown report prompt for Memories.ai."""
+        # Check for custom prompt first
+        if self.config:
+            custom = self.config.get_custom_prompt("memories_analysis")
+            if custom:
+                return custom
+        
+        # Default prompt
         return """Analyze this focus session by examining both the webcam and screen recordings.
 
 Generate a comprehensive productivity report in Markdown format with the following sections:

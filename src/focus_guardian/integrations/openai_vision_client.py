@@ -56,7 +56,8 @@ class OpenAIVisionClient:
         api_key: str,
         timeout_sec: int = 30,
         model: str = "gpt-4.1-nano",
-        detail: str = "high"
+        detail: str = "high",
+        config=None
     ):
         """
         Initialize OpenAI Vision client.
@@ -78,11 +79,13 @@ class OpenAIVisionClient:
             detail: Image detail level - "low" (85 tokens) or "high" (variable)
                    gpt-4.1-nano: Efficient token usage (~2400 tokens/image with high detail)
                    High detail recommended for better accuracy with 120s intervals.
+            config: Optional Config instance for custom prompts
         """
         self.api_key = api_key
         self.timeout_sec = timeout_sec
         self.model = model
         self.detail = detail
+        self.config = config  # Store config for custom prompts
 
         # Initialize OpenAI client
         self.client = OpenAI(api_key=api_key, timeout=timeout_sec)
@@ -132,6 +135,13 @@ class OpenAIVisionClient:
     
     def _build_cam_prompt(self) -> str:
         """Build prompt for camera snapshot classification."""
+        # Check for custom prompt first
+        if self.config:
+            custom = self.config.get_custom_prompt("cam_snapshot")
+            if custom:
+                return custom
+        
+        # Default prompt
         return """Analyze this webcam image and classify the user's attention state.
 
 Possible classifications (return ONLY the most dominant ones with confidence 0.0-1.0):
@@ -163,6 +173,13 @@ Return as JSON:
     
     def _build_screen_prompt(self) -> str:
         """Build prompt for screen snapshot classification."""
+        # Check for custom prompt first
+        if self.config:
+            custom = self.config.get_custom_prompt("screen_snapshot")
+            if custom:
+                return custom
+        
+        # Default prompt
         return """Analyze this screen capture and classify the visible content/applications.
 
 Possible classifications (return ONLY clearly visible ones with confidence 0.0-1.0):

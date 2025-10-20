@@ -104,7 +104,7 @@ class MainWindow(QMainWindow):
         if openai_key:
             try:
                 self.ai_summary_generator = AISummaryGenerator(openai_key, self.database)
-                self.comprehensive_report_generator = ComprehensiveReportGenerator(openai_key, self.database)
+                self.comprehensive_report_generator = ComprehensiveReportGenerator(openai_key, self.database, self.config)
                 logger.info("AI report generators initialized")
             except Exception as e:
                 logger.warning(f"Failed to initialize AI generators: {e}")
@@ -1200,6 +1200,372 @@ class MainWindow(QMainWindow):
         layout.addLayout(btn_layout)
         
         return group
+    
+    # Default prompt getters (extract from actual implementation)
+    def _get_default_cam_prompt(self) -> str:
+        """Get default camera snapshot prompt."""
+        return """Analyze this webcam image and classify the user's attention state.
+
+Possible classifications (return ONLY the most dominant ones with confidence 0.0-1.0):
+
+**Distraction Indicators:**
+- HeadAway: Head turned >45° away from screen (looking elsewhere)
+- EyesOffScreen: Gaze not directed at screen (looking down, away, or unfocused)
+- MicroSleep: Eyes closed or drowsy appearance (tired, nodding off)
+- PhoneLikely: Phone visible in hand or user looking down at phone
+
+**Absence Indicators:**
+- Absent: No person visible in frame (empty chair, person left desk)
+
+**Focus Indicators:**
+- Focused: Engaged posture, eyes on screen, attentive appearance
+
+**Instructions:**
+1. Look carefully at head orientation, eye gaze, and body language
+2. Return ONLY labels that are clearly present (confidence ≥ 0.6)
+3. Multiple labels can apply (e.g., HeadAway + PhoneLikely)
+4. If person is attentive and looking at screen, return Focused
+5. If no person visible, return Absent
+
+Return as JSON:
+{
+  "labels": {"LabelName": confidence, ...},
+  "reasoning": "brief explanation"
+}"""
+    
+    def _get_default_screen_prompt(self) -> str:
+        """Get default screen snapshot prompt."""
+        return """Analyze this screen capture and classify the visible content/applications.
+
+Possible classifications (return ONLY clearly visible ones with confidence 0.0-1.0):
+
+**HIGH-RISK DISTRACTION Content (Always flag these):**
+- VideoOnScreen: Video player showing entertainment/non-work content (YouTube, Netflix, TikTok, Twitch)
+  * Look for: play buttons, video timelines, thumbnails, entertainment titles
+  * Even if paused, flag if video content is visible
+  * Exception: Tutorial/educational videos WITH code/terminal visible = WorkRelatedVideo instead
+- SocialFeed: Social media feed scrolling (Twitter, Instagram, Facebook, Reddit, LinkedIn feed)
+- Games: Gaming applications or entertainment software
+- ChatWindow: Personal chat/messaging apps (Discord, WhatsApp, iMessage - NOT work Slack)
+
+**WORK-RELATED Video (Educational/Tutorial):**
+- WorkRelatedVideo: Tutorial, coding video, educational content WITH evidence of work context
+  * Must see: Code editor, terminal, or technical content alongside video
+  * Or: Video shows coding, technical tutorial, documentation walkthrough
+  
+**Focus Content:**
+- Code: Code editor or IDE (VS Code, PyCharm, Sublime, JetBrains, Vim)
+- Docs: Documentation, technical reading, wikis, API docs, Stack Overflow
+- Reading: Long-form reading (ebooks, PDFs, research papers)
+- Slides: Presentation software (PowerPoint, Google Slides, Keynote)
+- Terminal: Command line terminal or shell
+
+**Work Communication:**
+- Email: Email client (Gmail, Outlook, Apple Mail)
+- VideoCall: Video conferencing UI (Zoom, Meet, Teams, FaceTime)
+- WorkChat: Work messaging (Slack, Teams chat, work Discord server)
+
+**Borderline Content:**
+- MultipleMonitors: Multiple windows visible, potential context switching
+- Browser: Generic browser without clear content type
+
+**Neutral:**
+- Unknown: Cannot determine content type clearly
+
+**CRITICAL Instructions for Video Detection:**
+1. If you see a video player (YouTube, etc.), check the CONTEXT:
+   - Is there code, terminal, or work tools visible? → WorkRelatedVideo (productive)
+   - Is it just entertainment content? → VideoOnScreen (distraction)
+   - Look at video title, thumbnails, related videos for clues
+2. Entertainment videos are ALWAYS flagged as VideoOnScreen (distraction)
+3. Tutorial/educational videos WITH work context → WorkRelatedVideo (not flagged)
+4. Social media is ALWAYS a distraction (even LinkedIn feed browsing)
+5. Return labels with confidence ≥ 0.6 only
+6. Multiple labels can apply if multiple windows visible
+
+Return as JSON:
+{
+  "labels": {"LabelName": confidence, ...},
+  "reasoning": "detailed explanation of what you see and why you classified it this way"
+}"""
+    
+    def _get_default_memories_prompt(self) -> str:
+        """Get default Memories.ai analysis prompt."""
+        return """Analyze this focus session by examining both the webcam and screen recordings.
+
+Generate a comprehensive productivity report in Markdown format with the following sections:
+
+# Focus Session Productivity Report
+
+## Executive Summary
+Provide a 2-3 sentence overview of the session quality, primary activities, and overall productivity assessment.
+
+## Time-Based Activity Breakdown
+Create a chronological timeline showing:
+- Time segments with start/end timestamps (MM:SS format)
+- Activity classification (Focus/Break/Distraction)
+- Task hypothesis (what you observed the user doing)
+- Confidence level and evidence from both webcam and screen
+
+Use a table or structured list format for readability.
+
+## Application Usage Analysis
+Analyze screen content to identify:
+- Applications/tools used with time spent in each
+- Productivity classification (Productive/Neutral/Distraction)
+- Context switches and multitasking patterns
+- Percentage breakdown of time allocation
+
+## Distraction Analysis
+Detail distraction events including:
+- Timestamp and duration of each distraction
+- Distraction triggers (social media, phone, web browsing, etc.)
+- Correlation between webcam behavior (head movement, gaze) and screen content
+- Total distraction time and frequency
+
+## Behavioral Insights
+Correlate webcam and screen observations:
+- Focus patterns (when user was most engaged)
+- Attention quality indicators (posture, gaze consistency, head position)
+- Break patterns and their relationship to productivity
+- Signs of fatigue or frustration
+- Phone usage detection and impact
+
+## Productivity Metrics
+Calculate and present:
+- Focus ratio (focused time / total session time)
+- Average focus bout duration
+- Distraction frequency (events per hour)
+- Overall productivity score (0-100)
+- Context switch frequency
+
+## Actionable Recommendations
+Provide 3-5 specific, evidence-based recommendations to improve focus and productivity based on observed patterns.
+
+---
+
+**Instructions:**
+- Use clear Markdown formatting with headers, lists, tables, and emphasis
+- Include specific timestamps and evidence from the videos
+- Be objective and analytical
+- Provide quantitative metrics wherever possible
+- Make recommendations actionable and personalized to observed behavior
+- Do NOT wrap the output in code blocks - return raw Markdown text"""
+    
+    def _get_default_comprehensive_prompt(self) -> str:
+        """Get default comprehensive report template."""
+        return """You are an expert ADHD coach analyzing a focus session with comprehensive AI data.
+
+Generate a comprehensive, long-form report (800-1200 words) that:
+
+1. **Session Story** - Tell the narrative of this session
+2. **Emotional Journey** (if Hume AI data available)
+3. **Behavioral Patterns** (if Memories.ai data available)
+4. **Historical Comparison** (vs past week/month)
+5. **Deep Insights** - Non-obvious patterns
+6. **Actionable Recommendations** - Specific to user's data
+7. **Encouragement & Motivation**
+
+**TONE & STYLE:**
+- Personal: Use "you" and "your"
+- Data-driven: Reference specific numbers
+- Supportive: Encouraging, not judgmental
+- Insightful: Go beyond surface-level
+- Actionable: Every insight has a "what next"
+
+Return as markdown with clear sections and formatting."""
+    
+    # Save handlers
+    def _save_cam_prompt(self):
+        """Save custom camera prompt."""
+        prompt_text = self.cam_prompt_edit.toPlainText()
+        self.config.save_custom_prompt("cam_snapshot", prompt_text)
+        self.status_bar.showMessage("✅ Camera prompt saved - applies to new snapshots", 5000)
+        logger.info("Custom camera prompt saved")
+    
+    def _save_screen_prompt(self):
+        """Save custom screen prompt."""
+        prompt_text = self.screen_prompt_edit.toPlainText()
+        self.config.save_custom_prompt("screen_snapshot", prompt_text)
+        self.status_bar.showMessage("✅ Screen prompt saved - applies to new snapshots", 5000)
+        logger.info("Custom screen prompt saved")
+    
+    def _save_memories_prompt(self):
+        """Save custom Memories.ai prompt."""
+        prompt_text = self.memories_prompt_edit.toPlainText()
+        self.config.save_custom_prompt("memories_analysis", prompt_text)
+        self.status_bar.showMessage("✅ Memories.ai prompt saved - applies to new uploads", 5000)
+        logger.info("Custom Memories.ai prompt saved")
+    
+    def _save_comprehensive_prompt(self):
+        """Save custom comprehensive report template."""
+        prompt_text = self.comprehensive_prompt_edit.toPlainText()
+        self.config.save_custom_prompt("comprehensive_report", prompt_text)
+        self.status_bar.showMessage("✅ Report template saved - applies to new reports", 5000)
+        logger.info("Custom comprehensive report template saved")
+    
+    # Reset handlers
+    def _reset_cam_prompt(self):
+        """Reset camera prompt to default."""
+        self.cam_prompt_edit.setPlainText(self._get_default_cam_prompt())
+        self.config.reset_prompt_to_default("cam_snapshot")
+        self.status_bar.showMessage("✅ Camera prompt reset to default", 3000)
+        logger.info("Camera prompt reset to default")
+    
+    def _reset_screen_prompt(self):
+        """Reset screen prompt to default."""
+        self.screen_prompt_edit.setPlainText(self._get_default_screen_prompt())
+        self.config.reset_prompt_to_default("screen_snapshot")
+        self.status_bar.showMessage("✅ Screen prompt reset to default", 3000)
+        logger.info("Screen prompt reset to default")
+    
+    def _reset_memories_prompt(self):
+        """Reset Memories.ai prompt to default."""
+        self.memories_prompt_edit.setPlainText(self._get_default_memories_prompt())
+        self.config.reset_prompt_to_default("memories_analysis")
+        self.status_bar.showMessage("✅ Memories.ai prompt reset to default", 3000)
+        logger.info("Memories.ai prompt reset to default")
+    
+    def _reset_comprehensive_prompt(self):
+        """Reset comprehensive template to default."""
+        self.comprehensive_prompt_edit.setPlainText(self._get_default_comprehensive_prompt())
+        self.config.reset_prompt_to_default("comprehensive_report")
+        self.status_bar.showMessage("✅ Report template reset to default", 3000)
+        logger.info("Comprehensive template reset to default")
+    
+    # Snapshot debugging
+    def _view_last_snapshot_analysis(self):
+        """View the last snapshot's raw analysis data."""
+        if not self.current_session_id:
+            QMessageBox.information(
+                self,
+                "No Active Session",
+                "Start a session to view snapshot analysis."
+            )
+            return
+        
+        # Get last snapshot from current session
+        snapshots = self.database.get_snapshots_for_session(self.current_session_id)
+        
+        if not snapshots:
+            QMessageBox.information(
+                self,
+                "No Snapshots",
+                "No snapshots captured yet. Wait for the first snapshot (30 seconds)."
+            )
+            return
+        
+        # Get most recent snapshot with vision results
+        last_snap = None
+        for snap in reversed(snapshots):
+            if snap.vision_labels and snap.vision_json_path:
+                last_snap = snap
+                break
+        
+        if not last_snap:
+            QMessageBox.information(
+                self,
+                "No Analysis Yet",
+                "Snapshots captured but not yet analyzed. Wait a few seconds."
+            )
+            return
+        
+        # Load raw vision JSON
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
+        import json
+        
+        try:
+            vision_file = self.config.get_data_dir() / last_snap.vision_json_path
+            with open(vision_file, 'r') as f:
+                vision_data = json.load(f)
+            
+            # Create dialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle("🔍 Snapshot Analysis Details")
+            dialog.setMinimumSize(700, 600)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Info header
+            info = QLabel(f"Snapshot: {last_snap.timestamp.strftime('%H:%M:%S') if last_snap.timestamp else 'N/A'}")
+            info.setStyleSheet("font-weight: bold; font-size: 14px;")
+            layout.addWidget(info)
+            
+            # JSON display
+            text_edit = QTextEdit()
+            text_edit.setReadOnly(True)
+            text_edit.setPlainText(json.dumps(vision_data, indent=2))
+            text_edit.setStyleSheet("font-family: 'Courier New', monospace; font-size: 11px;")
+            layout.addWidget(text_edit)
+            
+            # Parsed labels
+            labels_text = "\n".join([f"• {k}: {v:.0%}" for k, v in last_snap.vision_labels.items()])
+            parsed_label = QLabel(f"Parsed Labels:\n{labels_text}")
+            parsed_label.setStyleSheet("background-color: #e8f5e9; padding: 10px; border-radius: 4px;")
+            layout.addWidget(parsed_label)
+            
+            # Close button
+            button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            button_box.rejected.connect(dialog.reject)
+            layout.addWidget(button_box)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Failed to view snapshot analysis: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"Failed to load snapshot data:\n\n{str(e)}")
+    
+    def _export_snapshot_schema(self):
+        """Export snapshot JSON schema to file."""
+        from PyQt6.QtWidgets import QFileDialog
+        import json
+        
+        schema = {
+            "title": "Snapshot Vision API Response Schema",
+            "type": "object",
+            "required": ["labels", "reasoning"],
+            "properties": {
+                "labels": {
+                    "type": "object",
+                    "description": "Classification labels with confidence scores",
+                    "additionalProperties": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0
+                    },
+                    "examples": [
+                        {"Focused": 0.9, "HeadAway": 0.1},
+                        {"VideoOnScreen": 0.85, "Code": 0.75}
+                    ]
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Brief explanation of classification"
+                }
+            },
+            "camera_labels": list(CAM_LABELS),
+            "screen_labels": list(SCREEN_LABELS)
+        }
+        
+        # Save dialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export JSON Schema",
+            "snapshot_schema.json",
+            "JSON Files (*.json)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w') as f:
+                    json.dump(schema, f, indent=2)
+                QMessageBox.information(
+                    self,
+                    "Schema Exported",
+                    f"JSON schema exported to:\n{file_path}"
+                )
+            except Exception as e:
+                QMessageBox.critical(self, "Export Failed", f"Failed to export schema:\n\n{str(e)}")
 
     def _on_camera_changed(self, index: int):
         """Handle camera selection change."""

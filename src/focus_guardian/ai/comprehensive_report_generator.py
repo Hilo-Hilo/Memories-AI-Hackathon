@@ -25,16 +25,18 @@ logger = get_logger(__name__)
 class ComprehensiveReportGenerator:
     """Generates comprehensive AI-powered reports using all data sources."""
 
-    def __init__(self, api_key: str, database: Database):
+    def __init__(self, api_key: str, database: Database, config=None):
         """
         Initialize comprehensive report generator.
 
         Args:
             api_key: OpenAI API key
             database: Database for accessing session data and history
+            config: Optional Config instance for custom prompts
         """
         self.client = OpenAI(api_key=api_key)
         self.database = database
+        self.config = config
         self.model = "gpt-4o-mini"  # gpt-5-nano returns empty responses for long-form generation
 
         logger.info("Comprehensive AI report generator initialized")
@@ -245,6 +247,49 @@ class ComprehensiveReportGenerator:
     def _build_comprehensive_prompt(self, context: Dict[str, Any]) -> str:
         """Build comprehensive prompt for GPT-4 report generation."""
         
+        # Check for custom template first
+        if self.config:
+            custom_template = self.config.get_custom_prompt("comprehensive_report")
+            if custom_template:
+                # Custom template should use placeholders that we'll replace
+                # For now, just prepend context to custom template
+                session = context["session"]
+                kpis = context["kpis"]
+                week_trends = context["historical_trends"]["week"]
+                month_trends = context["historical_trends"]["month"]
+                hume = context.get("hume_analysis", {})
+                memories = context.get("memories_analysis", {})
+                
+                # Build context header
+                context_header = f"""## SESSION OVERVIEW
+**Task:** {session['task_name']}
+**Duration:** {session['duration_min']:.0f} minutes
+**Focus Ratio:** {kpis.get('focus_ratio', 0) * 100:.0f}%
+**Distractions:** {kpis.get('num_alerts', 0)}
+**Snapshots:** {context['snapshots_count']}
+
+## HISTORICAL CONTEXT
+**Past Week:** {week_trends['count']} sessions, {week_trends['avg_focus_ratio'] * 100:.0f}% avg focus
+**Past Month:** {month_trends['count']} sessions, {month_trends['avg_focus_ratio'] * 100:.0f}% avg focus
+
+## EMOTION ANALYSIS
+{self._summarize_hume_data(hume)}
+
+## PATTERN ANALYSIS
+{self._summarize_memories_data(memories)}
+
+## DISTRACTION EVENTS
+{self._summarize_events(context.get('events', []))}
+
+## SNAPSHOT TIMELINE
+{context.get('snapshot_timeline', 'No data')}
+
+---
+
+"""
+                return context_header + custom_template
+        
+        # Default prompt
         session = context["session"]
         kpis = context["kpis"]
         hume = context.get("hume_analysis", {})

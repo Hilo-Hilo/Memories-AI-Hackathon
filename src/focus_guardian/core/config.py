@@ -786,4 +786,95 @@ class Config:
                 return False
 
         return False
+    
+    # ========================================================================
+    # Public API - Custom Prompts
+    # ========================================================================
+    
+    def get_custom_prompt(self, prompt_type: str) -> Optional[str]:
+        """
+        Get custom AI prompt if defined.
+        
+        Args:
+            prompt_type: Type of prompt (cam_snapshot, screen_snapshot, memories_analysis, comprehensive_report)
+            
+        Returns:
+            Custom prompt text or None if using default
+        """
+        custom_prompts = self._user_config.get("custom_prompts", {})
+        return custom_prompts.get(prompt_type)
+    
+    def save_custom_prompt(self, prompt_type: str, prompt_text: str) -> None:
+        """
+        Save custom AI prompt with versioning.
+        
+        Args:
+            prompt_type: Type of prompt
+            prompt_text: The custom prompt text
+        """
+        # Initialize custom_prompts if not exists
+        if "custom_prompts" not in self._user_config:
+            self._user_config["custom_prompts"] = {}
+        
+        # Archive old prompt version if exists
+        if prompt_type in self._user_config["custom_prompts"]:
+            self._archive_prompt_version(prompt_type, self._user_config["custom_prompts"][prompt_type])
+        
+        # Save new prompt
+        self._user_config["custom_prompts"][prompt_type] = prompt_text
+        self._save_user_config()
+        
+        logger.info(f"Custom prompt saved for {prompt_type} ({len(prompt_text)} chars)")
+    
+    def reset_prompt_to_default(self, prompt_type: str) -> None:
+        """
+        Reset prompt to default (remove custom prompt).
+        
+        Args:
+            prompt_type: Type of prompt to reset
+        """
+        if "custom_prompts" in self._user_config:
+            if prompt_type in self._user_config["custom_prompts"]:
+                # Archive before deleting
+                self._archive_prompt_version(prompt_type, self._user_config["custom_prompts"][prompt_type])
+                
+                del self._user_config["custom_prompts"][prompt_type]
+                self._save_user_config()
+                logger.info(f"Prompt reset to default for {prompt_type}")
+    
+    def _archive_prompt_version(self, prompt_type: str, prompt_text: str) -> None:
+        """Archive old prompt version for history."""
+        from datetime import datetime
+        
+        # Initialize prompt_versions if not exists
+        if "prompt_versions" not in self._user_config:
+            self._user_config["prompt_versions"] = []
+        
+        # Add version entry
+        version_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": prompt_type,
+            "prompt": prompt_text
+        }
+        
+        self._user_config["prompt_versions"].append(version_entry)
+        
+        # Keep only last 10 versions per prompt type
+        versions = self._user_config["prompt_versions"]
+        type_versions = [v for v in versions if v["type"] == prompt_type]
+        
+        if len(type_versions) > 10:
+            # Remove oldest versions beyond 10
+            versions_to_keep = sorted(type_versions, key=lambda x: x["timestamp"], reverse=True)[:10]
+            # Rebuild list keeping other prompt types and latest 10 of this type
+            self._user_config["prompt_versions"] = [
+                v for v in versions if v["type"] != prompt_type
+            ] + versions_to_keep
+        
+        logger.info(f"Archived prompt version for {prompt_type}")
+    
+    def get_prompt_version_history(self, prompt_type: str) -> list:
+        """Get version history for a prompt type."""
+        versions = self._user_config.get("prompt_versions", [])
+        return [v for v in versions if v["type"] == prompt_type]
 
