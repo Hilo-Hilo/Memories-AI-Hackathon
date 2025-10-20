@@ -2137,6 +2137,105 @@ Historical Trends, Snapshot Analysis</p>
                 f"Failed to load comprehensive AI report:\n\n{str(e)}"
             )
     
+    def _on_regenerate_all_ai_reports(self, session_id: str):
+        """Regenerate all AI reports (Hume, Memories, Comprehensive) with versioning."""
+        import threading
+        from datetime import datetime
+        
+        # Confirm with user
+        reply = QMessageBox.question(
+            self,
+            "Regenerate All AI Reports",
+            "This will:\n\n"
+            "• Re-analyze with Hume AI (new emotion analysis)\n"
+            "• Re-analyze with Memories.ai (new pattern insights)\n"
+            "• Generate new comprehensive AI report\n"
+            "• Archive old reports (not deleted)\n\n"
+            "This may take 5-10 minutes. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Get session
+        session = self.database.get_session(session_id)
+        if not session:
+            return
+        
+        # Show status
+        self.status_bar.showMessage(f"🔄 Regenerating all AI reports for session...", 5000)
+        
+        def regen_worker():
+            try:
+                logger.info(f"Starting full AI report regeneration for {session_id}")
+                
+                # Archive old Hume/Memories results
+                self._archive_old_cloud_results(session_id)
+                
+                # Re-upload to Hume AI and Memories.ai
+                cam_video = self.config.get_data_dir() / session.cam_mp4_path
+                screen_video = self.config.get_data_dir() / session.screen_mp4_path if session.screen_mp4_path else None
+                
+                hume_job_id, memories_job_id = self.session_manager.cloud_analysis_manager.upload_session_for_analysis(
+                    session_id=session_id,
+                    cam_video_path=cam_video,
+                    screen_video_path=screen_video,
+                    run_hume=True,
+                    run_memories=True
+                )
+                
+                logger.info(f"Re-upload complete: hume={hume_job_id}, memories={memories_job_id}")
+                
+                # Update UI
+                def on_complete():
+                    self._load_sessions_list()
+                    self.status_bar.showMessage(
+                        "✅ Regeneration started! Check status in 5-10 minutes, then generate comprehensive report.",
+                        15000
+                    )
+                
+                QTimer.singleShot(0, on_complete)
+                
+            except Exception as e:
+                logger.error(f"Failed to regenerate AI reports: {e}", exc_info=True)
+                
+                def on_error():
+                    self.status_bar.showMessage(f"❌ Regeneration failed: {str(e)[:60]}", 10000)
+                
+                QTimer.singleShot(0, on_error)
+        
+        thread = threading.Thread(target=regen_worker, daemon=True)
+        thread.start()
+    
+    def _archive_old_cloud_results(self, session_id: str):
+        """Archive old Hume AI and Memories.ai results before regenerating."""
+        import shutil
+        from pathlib import Path
+        
+        try:
+            session_dir = self.config.get_data_dir() / f"sessions/{session_id}"
+            archive_dir = session_dir / "ai_reports_archive"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Find and archive old Hume results
+            cloud_results_dir = self.config.get_data_dir() / "cloud_results" / session_id
+            if cloud_results_dir.exists():
+                timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+                
+                for file in cloud_results_dir.glob("hume_*.json"):
+                    archive_file = archive_dir / f"{file.stem}_{timestamp}.json"
+                    shutil.copy2(file, archive_file)
+                    logger.info(f"Archived {file.name}")
+                
+                for file in cloud_results_dir.glob("memories_*.json"):
+                    archive_file = archive_dir / f"{file.stem}_{timestamp}.json"
+                    shutil.copy2(file, archive_file)
+                    logger.info(f"Archived {file.name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to archive old results: {e}")
+    
     def _show_about(self):
         """Show about dialog."""
         QMessageBox.about(
@@ -3961,9 +4060,32 @@ Historical Trends, Snapshot Analysis</p>
 
                 row += 1
 
-        # Check if both Hume and Memories are complete - show Generate AI Report button
+        # Check cloud analysis status
         hume_complete = any(job.provider.value == "hume_ai" and job.status == CloudJobStatus.COMPLETED for job in cloud_jobs)
         memories_complete = any(job.provider.value == "memories_ai" and job.status == CloudJobStatus.COMPLETED for job in cloud_jobs)
+        has_any_cloud_jobs = len(cloud_jobs) > 0
+        
+        # Regenerate All button (if has any completed cloud analysis)
+        if has_any_cloud_jobs and (hume_complete or memories_complete):
+            regen_btn = QPushButton("🔄 Regenerate All AI Reports")
+            regen_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f39c12;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #e67e22;
+                }
+            """)
+            regen_btn.setToolTip("Re-run Hume AI, Memories.ai, and comprehensive AI report generation (old reports archived)")
+            regen_btn.clicked.connect(lambda: self._on_regenerate_all_ai_reports(session.session_id))
+            layout.addWidget(regen_btn, row, 0, 1, 2)
+            row += 1
         
         if hume_complete and memories_complete:
             # Check if comprehensive report already generated

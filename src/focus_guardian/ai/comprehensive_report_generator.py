@@ -90,6 +90,9 @@ class ComprehensiveReportGenerator:
         week_trends = self._calculate_trends(week_sessions)
         month_trends = self._calculate_trends(month_sessions)
 
+        # Build snapshot timeline with timestamps
+        snapshot_timeline = self._build_snapshot_timeline(session, snapshots, events)
+
         return {
             "session": {
                 "id": session_id,
@@ -108,6 +111,7 @@ class ComprehensiveReportGenerator:
                 for e in events
             ],
             "snapshots_count": len(snapshots),
+            "snapshot_timeline": snapshot_timeline,
             "hume_analysis": hume_results or {},
             "memories_analysis": memories_results or {},
             "historical_trends": {
@@ -115,6 +119,33 @@ class ComprehensiveReportGenerator:
                 "month": month_trends
             }
         }
+    
+    def _build_snapshot_timeline(self, session, snapshots: list, events: list) -> str:
+        """Build compact snapshot timeline with timestamps for context."""
+        if not snapshots or not session:
+            return "No snapshot data"
+        
+        session_start = session.started_at
+        timeline = []
+        
+        # Group snapshots by minute
+        from collections import defaultdict
+        by_minute = defaultdict(list)
+        
+        for snap in snapshots[:10]:  # Only first 10 to save tokens
+            if snap.timestamp and snap.vision_labels:
+                minutes_in = int((snap.timestamp - session_start).total_seconds() / 60)
+                time_str = snap.timestamp.strftime('%H:%M')
+                labels = sorted(snap.vision_labels.items(), key=lambda x: x[1], reverse=True)[:2]
+                label_str = ", ".join([f"{k}({v:.0%})" for k, v in labels])
+                
+                by_minute[minutes_in].append(f"{time_str}: {label_str}")
+        
+        # Build compact summary
+        for minute in sorted(by_minute.keys())[:5]:  # Only first 5 minutes
+            timeline.extend(by_minute[minute][:2])  # Max 2 snapshots per minute
+        
+        return "\n".join(timeline) if timeline else "Snapshot data minimal"
 
     def _get_historical_sessions(self, days: int) -> List[Session]:
         """Get sessions from the past N days."""
@@ -235,6 +266,9 @@ class ComprehensiveReportGenerator:
 
 ## DISTRACTION EVENTS
 {self._summarize_events(context.get('events', []))}
+
+## SNAPSHOT TIMELINE (Key Moments)
+{context.get('snapshot_timeline', 'No data')}
 
 ## YOUR TASK
 
@@ -361,11 +395,23 @@ This person is building a focus practice - help them see their growth!"""
     def save_comprehensive_report(
         self,
         session_id: str,
-        report: Dict[str, Any]
+        report: Dict[str, Any],
+        version_old: bool = True
     ) -> Path:
-        """Save comprehensive report to session folder."""
+        """
+        Save comprehensive report to session folder with versioning.
+        
+        Args:
+            session_id: Session ID
+            report: Report data to save
+            version_old: If True, backup existing report before overwriting
+        
+        Returns:
+            Path to saved report file
+        """
         try:
             from pathlib import Path
+            import shutil
             
             # Get session directory
             session_dir = Path(self.database.get_session(session_id).cam_mp4_path).parent if self.database.get_session(session_id) else None
@@ -377,8 +423,30 @@ This person is building a focus practice - help them see their growth!"""
             
             session_dir.mkdir(parents=True, exist_ok=True)
             
-            # Save report
+            # Create archive directory for old versions
+            archive_dir = session_dir / "ai_reports_archive"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            
             report_file = session_dir / "comprehensive_ai_report.json"
+            
+            # Version old report if it exists
+            if version_old and report_file.exists():
+                # Load old report to get its timestamp
+                try:
+                    with open(report_file, 'r') as f:
+                        old_report = json.load(f)
+                    old_timestamp = old_report.get('generated_at', 'unknown')
+                    # Clean timestamp for filename
+                    timestamp_clean = old_timestamp.replace(':', '-').replace('.', '-')[:19]
+                except:
+                    timestamp_clean = datetime.now().strftime('%Y%m%d-%H%M%S')
+                
+                # Move old report to archive
+                archive_file = archive_dir / f"comprehensive_ai_report_{timestamp_clean}.json"
+                shutil.copy2(report_file, archive_file)
+                logger.info(f"Archived old report to {archive_file}")
+            
+            # Save new report
             with open(report_file, 'w') as f:
                 json.dump(report, f, indent=2)
             
