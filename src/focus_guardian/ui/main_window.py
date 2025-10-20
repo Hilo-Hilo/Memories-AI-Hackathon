@@ -2119,11 +2119,14 @@ Historical Trends, Snapshot Analysis</p>
             text_display.setStyleSheet("""
                 QTextEdit {
                     font-size: 14px;
-                    color: #2c3e50;
-                    background-color: white;
+                    color: #000000;
+                    background-color: #ffffff;
                     border: none;
                     padding: 20px;
                     line-height: 1.8;
+                }
+                QTextEdit p, QTextEdit h1, QTextEdit h2, QTextEdit h3, QTextEdit h4, QTextEdit li {
+                    color: #000000;
                 }
             """)
             
