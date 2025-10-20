@@ -6404,15 +6404,52 @@ Historical Trends, Snapshot Analysis</p>
         if self.session_active:
             reply = QMessageBox.question(
                 self,
-                "Quit Application",
-                "A session is active. Are you sure you want to quit?",
+                "Active Session Detected",
+                "A focus session is currently active.\n\n"
+                "Do you want to stop and save the session before quitting?\n\n"
+                "• Yes: Stop session and save data\n"
+                "• No: Cancel quit and keep session running",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
 
             if reply == QMessageBox.StandardButton.No:
                 event.ignore()
                 return
+            
+            # User chose Yes - stop the session before quitting
+            logger.info("Auto-stopping active session before application close...")
+            try:
+                # Stop timers
+                self.session_timer.stop()
+                self.stats_timer.stop()
+                
+                # Stop session manager
+                stopped_session_id = self.session_manager.stop_session()
+                logger.info(f"✅ Session auto-stopped on quit: {stopped_session_id}")
+                
+                # Reset UI state
+                self.session_active = False
+                self.current_session_id = None
+                
+                # Show brief confirmation
+                self.status_bar.showMessage("✅ Session saved successfully", 2000)
+                
+            except Exception as e:
+                logger.error(f"❌ Failed to auto-stop session: {e}", exc_info=True)
+                
+                # Ask if user still wants to quit despite error
+                error_reply = QMessageBox.critical(
+                    self,
+                    "Error Stopping Session",
+                    f"Failed to properly stop the session:\n\n{str(e)}\n\n"
+                    "Quit anyway? (Session data may be incomplete)",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if error_reply == QMessageBox.StandardButton.No:
+                    event.ignore()
+                    return
 
-        logger.info("Application closing")
+        logger.info("Application closing gracefully")
         event.accept()
 

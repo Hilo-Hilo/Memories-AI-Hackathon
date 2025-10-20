@@ -60,6 +60,14 @@ def main():
         main_window = MainWindow(config, database)
         main_window.show()
         
+        # Connect cleanup handler for Ctrl+C and app quit
+        def cleanup_on_quit():
+            """Cleanup handler for application quit."""
+            logger.info("Application quit signal received")
+            # The closeEvent will handle session cleanup
+        
+        app.aboutToQuit.connect(cleanup_on_quit)
+        
         logger.info("Main window created, entering event loop")
         
         # Run application
