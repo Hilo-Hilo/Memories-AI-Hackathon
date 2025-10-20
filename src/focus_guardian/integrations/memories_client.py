@@ -191,6 +191,8 @@ class MemoriesClient:
                                 logger.debug(f"Video being processed (waited {elapsed}s)")
                             elif status == 'UPLOADING':
                                 logger.debug(f"Video being uploaded (waited {elapsed}s)")
+                            elif status == 'UNPARSE':
+                                logger.debug(f"Video uploaded, waiting for parsing (waited {elapsed}s)")
                             else:
                                 logger.debug(f"Unknown video status '{status}' (waited {elapsed}s)")
 
@@ -518,6 +520,37 @@ Please provide a structured analysis with specific timestamps and measurable met
 
         except Exception as e:
             logger.error(f"Failed to list videos: {e}", exc_info=True)
+            return None
+
+    def get_video_status(self, video_no: str, unique_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Check if a video exists and get its processing status.
+
+        Args:
+            video_no: Video number to check
+            unique_id: Unique identifier
+
+        Returns:
+            Video info dict with status, or None if not found
+            Status values: PARSE (processed), UNPARSE (uploaded but not processed),
+                          PROCESSING (being processed), FAIL (failed)
+        """
+        logger.info(f"Checking status for video {video_no} in {unique_id}")
+
+        try:
+            videos = self.list_videos(unique_id)
+            if videos:
+                for video in videos:
+                    if video.get('video_no') == video_no:
+                        status = video.get('status')
+                        logger.info(f"Video {video_no} found with status: {status}")
+                        return video
+            
+            logger.info(f"Video {video_no} not found in {unique_id}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to get video status: {e}", exc_info=True)
             return None
 
     def delete_video(
