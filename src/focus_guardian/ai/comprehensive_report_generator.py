@@ -35,7 +35,7 @@ class ComprehensiveReportGenerator:
         """
         self.client = OpenAI(api_key=api_key)
         self.database = database
-        self.model = "gpt-5-nano"  # Cheapest option for text generation ($0.05/1M input, $0.40/1M output)
+        self.model = "gpt-4o-mini"  # Use gpt-4o-mini - higher rate limits and handles large contexts better
 
         logger.info("Comprehensive AI report generator initialized")
 
@@ -228,13 +228,13 @@ class ComprehensiveReportGenerator:
 - Total Focus Time: {month_trends['total_time_min']:.0f} min
 
 ## EMOTION ANALYSIS (Hume AI)
-{json.dumps(hume, indent=2) if hume else "Not available"}
+{self._summarize_hume_data(hume) if hume else "Not available"}
 
 ## PATTERN ANALYSIS (Memories.ai)
-{memories.get('markdown_report', 'Not available') if memories else 'Not available'}
+{self._summarize_memories_data(memories) if memories else "Not available"}
 
 ## DISTRACTION EVENTS
-{json.dumps(context.get('events', []), indent=2)}
+{self._summarize_events(context.get('events', []))}
 
 ## YOUR TASK
 
@@ -296,6 +296,54 @@ Be honest about challenges while celebrating progress.
 This person is building a focus practice - help them see their growth!"""
 
         return prompt
+    
+    def _summarize_hume_data(self, hume: Dict) -> str:
+        """Summarize Hume AI data to reduce token usage."""
+        if not hume:
+            return "Not available"
+        
+        summary = hume.get('summary', {})
+        if summary:
+            # Extract key emotions
+            top_emotions = sorted(
+                [(k, v.get('mean', 0)) for k, v in summary.items() if isinstance(v, dict)],
+                key=lambda x: x[1],
+                reverse=True
+            )[:5]
+            
+            return "Top emotions: " + ", ".join([f"{name} (avg: {val:.2f})" for name, val in top_emotions])
+        
+        return f"Analyzed {hume.get('frame_count', 0)} frames"
+    
+    def _summarize_memories_data(self, memories: Dict) -> str:
+        """Summarize Memories.ai data to reduce token usage."""
+        if not memories:
+            return "Not available"
+        
+        # Extract first 500 chars of markdown report
+        report = memories.get('markdown_report', '')
+        if len(report) > 500:
+            return report[:500] + "... (truncated for brevity)"
+        return report
+    
+    def _summarize_events(self, events: List[Dict]) -> str:
+        """Summarize distraction events to reduce token usage."""
+        if not events:
+            return "No distraction events detected"
+        
+        distraction_events = [e for e in events if e.get('type') == 'distraction']
+        if not distraction_events:
+            return "No distraction events detected"
+        
+        summary = f"Total: {len(distraction_events)} distractions\n"
+        for i, event in enumerate(distraction_events[:5], 1):  # Only first 5
+            event_data = event.get('data', {})
+            summary += f"{i}. {event_data.get('distraction_type', 'Unknown')} - {event_data.get('duration_sec', 0)/60:.1f} min\n"
+        
+        if len(distraction_events) > 5:
+            summary += f"... and {len(distraction_events) - 5} more"
+        
+        return summary
 
     def save_comprehensive_report(
         self,

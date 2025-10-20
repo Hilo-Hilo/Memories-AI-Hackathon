@@ -2015,6 +2015,19 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logger.error(f"Failed to generate comprehensive report: {e}", exc_info=True)
                 
+                # Determine error type for better messaging
+                error_msg = str(e)
+                if "rate_limit" in error_msg.lower():
+                    user_message = "Rate limit exceeded. Please wait a moment and try again."
+                elif "quota" in error_msg.lower() or "insufficient" in error_msg.lower():
+                    user_message = "API quota exceeded. Please check your OpenAI account."
+                elif "timeout" in error_msg.lower():
+                    user_message = "Request timed out. Please try again."
+                elif "network" in error_msg.lower() or "connection" in error_msg.lower():
+                    user_message = "Network error. Please check your internet connection."
+                else:
+                    user_message = f"An error occurred: {str(e)[:100]}"
+                
                 def on_error():
                     # Remove from generating set
                     if session_id in self.generating_reports:
@@ -2024,7 +2037,16 @@ class MainWindow(QMainWindow):
                     self._load_sessions_list()
                     
                     # Show error in status bar (non-blocking)
-                    self.status_bar.showMessage(f"❌ AI report generation failed: {str(e)[:50]}", 10000)
+                    self.status_bar.showMessage(f"❌ AI report generation failed: {user_message[:80]}", 15000)
+                    
+                    # Optionally show a dialog for critical errors
+                    if "quota" in error_msg.lower() or "api" in error_msg.lower():
+                        QMessageBox.warning(
+                            self,
+                            "AI Report Generation Failed",
+                            f"{user_message}\n\n"
+                            "You can try again later or view the basic Hume AI and Memories.ai results separately."
+                        )
                 
                 QTimer.singleShot(0, on_error)
         
