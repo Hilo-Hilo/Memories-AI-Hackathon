@@ -2176,50 +2176,10 @@ Historical Trends, Snapshot Analysis</p>
             scroll_area.setWidget(text_display)
             layout.addWidget(scroll_area)
             
-            # Buttons
-            button_layout = QHBoxLayout()
-            
-            # Regenerate button
-            regen_btn = QPushButton("🔄 Regenerate This Report")
-            regen_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #e67e22;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    font-size: 13px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #d35400;
-                }
-            """)
-            regen_btn.setToolTip("Generate a new comprehensive report with latest data (old archived)")
-            regen_btn.clicked.connect(lambda: self._regenerate_and_close(dialog, session_id))
-            button_layout.addWidget(regen_btn)
-            
-            button_layout.addStretch()
-            
             # Close button
-            close_btn = QPushButton("Close")
-            close_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #95a5a6;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    font-size: 13px;
-                }
-                QPushButton:hover {
-                    background-color: #7f8c8d;
-                }
-            """)
-            close_btn.clicked.connect(dialog.accept)
-            button_layout.addWidget(close_btn)
-            
-            layout.addLayout(button_layout)
+            button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            button_box.accepted.connect(dialog.accept)
+            layout.addWidget(button_box)
             
             dialog.exec()
             
@@ -2231,19 +2191,6 @@ Historical Trends, Snapshot Analysis</p>
                 f"Failed to load comprehensive AI report:\n\n{str(e)}"
             )
     
-    def _regenerate_and_close(self, dialog, session_id: str):
-        """Regenerate comprehensive report and close dialog."""
-        dialog.accept()  # Close the view dialog
-        
-        # Show immediate feedback
-        self.status_bar.showMessage("🔄 Regenerating comprehensive AI report...", 3000)
-        
-        # Mark as generating
-        self.generating_reports.add(session_id)
-        self._load_sessions_list()
-        
-        # Trigger regeneration (which will auto-open when complete)
-        self._trigger_comprehensive_regen_with_autoopen(session_id)
     
     def _show_desktop_notification(self, title: str, message: str):
         """Show desktop notification using system tray."""
@@ -2387,10 +2334,6 @@ Historical Trends, Snapshot Analysis</p>
         # Just trigger normal generation - it will archive old and create new
         self._on_generate_comprehensive_report(session_id)
     
-    def _trigger_comprehensive_regen_with_autoopen(self, session_id: str):
-        """Trigger comprehensive report regeneration (same as _on_generate_comprehensive_report)."""
-        # This is just an alias - both do the same thing (auto-open on complete)
-        self._on_generate_comprehensive_report(session_id)
     
     def _archive_old_cloud_results(self, session_id: str, hume_only: bool = False, memories_only: bool = False):
         """Archive old Hume AI and Memories.ai results before regenerating."""
@@ -4323,7 +4266,35 @@ Historical Trends, Snapshot Analysis</p>
             comprehensive_report_path = self.config.get_data_dir() / f"sessions/{session.session_id}/comprehensive_ai_report.json"
             
             if comprehensive_report_path.exists():
-                # Report already generated - show view button
+                # Report already generated - show regenerate button above view button
+                is_generating = session.session_id in self.generating_reports
+                btn_text = "🔄 Regenerating..." if is_generating else "🔄 Regenerate AI Report"
+                regen_btn = QPushButton(btn_text)
+                regen_btn.setEnabled(not is_generating)
+                regen_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e67e22;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 6px 12px;
+                        font-size: 12px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #d35400;
+                    }
+                    QPushButton:disabled {
+                        background-color: #95a5a6;
+                        color: #ecf0f1;
+                    }
+                """)
+                regen_btn.setToolTip("Regenerate comprehensive report with latest data (old archived)")
+                regen_btn.clicked.connect(lambda: self._on_regenerate_comprehensive_only(session.session_id))
+                layout.addWidget(regen_btn, row, 0, 1, 2)
+                row += 1
+                
+                # View button below regenerate
                 view_comprehensive_btn = QPushButton("📊 View Comprehensive AI Report")
                 view_comprehensive_btn.setStyleSheet("""
                     QPushButton {
