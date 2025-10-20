@@ -377,19 +377,71 @@ class MainWindow(QMainWindow):
         """)
         stats_layout = QVBoxLayout(stats_widget)
         
-        # First row: Counters
+        # First row: Counters (clickable for details)
         counters_layout = QHBoxLayout()
         
-        self.snapshots_label = QLabel("📸 Snapshots: 0")
-        self.snapshots_label.setStyleSheet("font-size: 14px; color: #3498db; font-weight: bold;")
+        # Make labels clickable buttons for detailed view
+        self.snapshots_label = QPushButton("📸 Snapshots: 0")
+        self.snapshots_label.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                color: #3498db;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+                text-align: left;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ecf0f1;
+                border-radius: 4px;
+            }
+        """)
+        self.snapshots_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.snapshots_label.setToolTip("Click to see detailed snapshot analysis")
+        self.snapshots_label.clicked.connect(self._show_snapshot_details)
         counters_layout.addWidget(self.snapshots_label)
         
-        self.distractions_label = QLabel("⚠️ Distractions: 0")
-        self.distractions_label.setStyleSheet("font-size: 14px; color: #e74c3c; font-weight: bold;")
+        self.distractions_label = QPushButton("⚠️ Distractions: 0")
+        self.distractions_label.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                color: #e74c3c;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+                text-align: left;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ecf0f1;
+                border-radius: 4px;
+            }
+        """)
+        self.distractions_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.distractions_label.setToolTip("Click to see distraction breakdown and voting details")
+        self.distractions_label.clicked.connect(self._show_distraction_details)
         counters_layout.addWidget(self.distractions_label)
         
-        self.focus_ratio_label = QLabel("✓ Focus: 100%")
-        self.focus_ratio_label.setStyleSheet("font-size: 14px; color: #27ae60; font-weight: bold;")
+        self.focus_ratio_label = QPushButton("✓ Focus: 100%")
+        self.focus_ratio_label.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                color: #27ae60;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+                text-align: left;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #ecf0f1;
+                border-radius: 4px;
+            }
+        """)
+        self.focus_ratio_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.focus_ratio_label.setToolTip("Click to see detailed focus analysis")
+        self.focus_ratio_label.clicked.connect(self._show_focus_details)
         counters_layout.addWidget(self.focus_ratio_label)
         
         stats_layout.addLayout(counters_layout)
@@ -2756,6 +2808,451 @@ class MainWindow(QMainWindow):
         
         thread = threading.Thread(target=batch_upload_worker, daemon=True)
         thread.start()
+    
+    def _show_snapshot_details(self):
+        """Show detailed snapshot analysis panel."""
+        if not self.current_session_id:
+            QMessageBox.information(
+                self,
+                "No Active Session",
+                "Start a session to see snapshot details."
+            )
+            return
+        
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QTableWidget, QTableWidgetItem, QHeaderView
+        
+        # Get snapshots from database
+        snapshots = self.database.get_snapshots_for_session(self.current_session_id)
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("📸 Snapshot Analysis Details")
+        dialog.setMinimumSize(900, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Header summary
+        summary = QLabel(f"<h2>Snapshot Analysis</h2><p>Total snapshots: <b>{len(snapshots)}</b></p>")
+        summary.setStyleSheet("color: #2c3e50;")
+        layout.addWidget(summary)
+        
+        # Create table for snapshot details
+        table = QTableWidget()
+        table.setColumnCount(6)
+        table.setHorizontalHeaderLabels([
+            "Time", "Type", "Status", "Labels", "Confidence", "Latency"
+        ])
+        table.setRowCount(len(snapshots))
+        
+        for row, snapshot in enumerate(snapshots):
+            # Time
+            time_str = snapshot.captured_at.strftime("%H:%M:%S") if snapshot.captured_at else "N/A"
+            table.setItem(row, 0, QTableWidgetItem(time_str))
+            
+            # Type
+            snap_type = "📷 Camera" if "cam" in snapshot.jpeg_path else "🖥️ Screen"
+            table.setItem(row, 1, QTableWidgetItem(snap_type))
+            
+            # Status
+            status_map = {
+                "pending": "⏳ Pending",
+                "uploading": "⬆️ Uploading",
+                "completed": "✅ Done",
+                "failed": "❌ Failed"
+            }
+            status = status_map.get(snapshot.upload_status, snapshot.upload_status)
+            table.setItem(row, 2, QTableWidgetItem(status))
+            
+            # Labels
+            if snapshot.vision_labels:
+                labels_str = ", ".join([f"{k}:{v:.0%}" for k, v in list(snapshot.vision_labels.items())[:2]])
+                table.setItem(row, 3, QTableWidgetItem(labels_str))
+            else:
+                table.setItem(row, 3, QTableWidgetItem("Analyzing..."))
+            
+            # Confidence
+            if snapshot.vision_labels:
+                max_conf = max(snapshot.vision_labels.values()) if snapshot.vision_labels else 0
+                table.setItem(row, 4, QTableWidgetItem(f"{max_conf:.0%}"))
+            else:
+                table.setItem(row, 4, QTableWidgetItem("-"))
+            
+            # Latency
+            table.setItem(row, 5, QTableWidgetItem("-"))
+        
+        # Adjust columns
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        
+        layout.addWidget(table)
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+    
+    def _show_distraction_details(self):
+        """Show detailed distraction analysis with hysteresis voting details."""
+        if not self.current_session_id:
+            QMessageBox.information(
+                self,
+                "No Active Session",
+                "Start a session to see distraction details."
+            )
+            return
+        
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QScrollArea, QFrame
+        
+        # Get events and snapshots from database
+        events = self.database.get_session_events(self.current_session_id)
+        snapshots = self.database.get_snapshots_for_session(self.current_session_id)
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("⚠️ Distraction Analysis Details")
+        dialog.setMinimumSize(900, 700)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        
+        # Build detailed report inline
+        html = self._build_distraction_report(events, snapshots)
+        
+        text_display = QTextEdit()
+        text_display.setReadOnly(True)
+        text_display.setHtml(html)
+        text_display.setStyleSheet("""
+            QTextEdit {
+                font-size: 13px;
+                color: #2c3e50;
+                background-color: white;
+                border: 1px solid #bdc3c7;
+                border-radius: 4px;
+                padding: 15px;
+                line-height: 1.5;
+            }
+        """)
+        content_layout.addWidget(text_display)
+        
+        scroll_area.setWidget(content_widget)
+        layout.addWidget(scroll_area)
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+    
+    def _show_focus_details(self):
+        """Show detailed focus analysis."""
+        if not self.current_session_id:
+            QMessageBox.information(
+                self,
+                "No Active Session",
+                "Start a session to see focus details."
+            )
+            return
+        
+        # For now, show a simple summary - can be enhanced later
+        try:
+            stats = self.session_manager.get_session_stats()
+            
+            QMessageBox.information(
+                self,
+                "✓ Focus Analysis",
+                f"Current Focus Statistics:\n\n"
+                f"• Focus Ratio: {stats['focus_ratio']*100:.1f}%\n"
+                f"• Total Snapshots: {stats['total_snapshots']}\n"
+                f"• Distraction Events: {stats['total_events']}\n\n"
+                f"The hysteresis voting engine (K=3) analyzes patterns across "
+                f"multiple snapshots to confirm distractions before alerting."
+            )
+        except Exception as e:
+            logger.error(f"Failed to show focus details: {e}")
+    
+    def _build_distraction_report(self, events: list, snapshots: list) -> str:
+        """Build detailed HTML report for distraction analysis."""
+        
+        html = """<div style="color: #2c3e50; line-height: 1.6;">"""
+        
+        # Header
+        html += """<h1 style="color: #2c3e50; border-bottom: 3px solid #e74c3c; padding-bottom: 10px;">
+        ⚠️ Distraction Analysis Report</h1>"""
+        
+        # Summary stats
+        distraction_events = [e for e in events if e.event_type == "distraction"]
+        total_snapshots = len(snapshots)
+        
+        html += f"""<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>Overview</h3>
+        <p><b>Total Snapshots Analyzed:</b> {total_snapshots}</p>
+        <p><b>Distraction Events Detected:</b> {len(distraction_events)}</p>
+        <p><b>Hysteresis Voting:</b> K=3 (requires pattern across 3+ consecutive snapshots)</p>
+        <p><b>Minimum Span:</b> 3.5 minutes (prevents false positives from brief glances)</p>
+        </div>"""
+        
+        # Hysteresis Voting Explanation
+        html += """<h2 style="color: #3498db; margin-top: 25px;">🔬 How the Voting Engine Works</h2>
+        <div style="background-color: #e3f2fd; padding: 15px; border-radius: 6px; border-left: 4px solid #3498db;">
+        <p><b>Pattern-Confirmed Detection:</b> The system uses K=3 hysteresis voting to eliminate false positives.</p>
+        <ul>
+            <li>Each snapshot is analyzed by AI (webcam + screen)</li>
+            <li>Results are accumulated in a rolling buffer (last 3 snapshots)</li>
+            <li>A distraction is only flagged if ≥2 of 3 snapshots show the same pattern</li>
+            <li>Minimum 3.5 minute span required across snapshots (debounce)</li>
+            <li>This ensures brief glances don't trigger false alerts</li>
+        </ul>
+        </div>"""
+        
+        # Distraction Events with Voting Details
+        if distraction_events:
+            html += f"""<h2 style="color: #e74c3c; margin-top: 25px;">📋 Detected Distraction Events ({len(distraction_events)})</h2>"""
+            
+            for i, event in enumerate(distraction_events, 1):
+                # Parse event data
+                event_data = event.event_data if isinstance(event.event_data, dict) else {}
+                distraction_type = event_data.get("distraction_type", "Unknown")
+                confidence = event_data.get("confidence", 0) * 100
+                duration = event_data.get("duration_sec", 0) / 60
+                vision_votes = event_data.get("vision_votes", {})
+                
+                html += f"""<div style="background-color: #fff3cd; padding: 15px; border-radius: 6px; margin: 10px 0; border-left: 4px solid #f39c12;">
+                <h3 style="margin-top: 0;">Event #{i}: {distraction_type}</h3>
+                <p><b>Time:</b> {event.timestamp.strftime('%H:%M:%S') if event.timestamp else 'N/A'}</p>
+                <p><b>Duration:</b> {duration:.1f} minutes</p>
+                <p><b>Confidence:</b> {confidence:.0f}%</p>"""
+                
+                # Show voting breakdown
+                if vision_votes:
+                    html += """<h4 style="color: #3498db; margin-top: 15px;">🗳️ Voting Breakdown (K=3 Hysteresis)</h4>
+                    <div style="background-color: white; padding: 10px; border-radius: 4px;">
+                    <p style="font-size: 12px; color: #7f8c8d; margin-bottom: 8px;">
+                    AI classifications across 3 consecutive snapshots:</p>"""
+                    
+                    for label, count in vision_votes.items():
+                        percentage = (count / 3) * 100
+                        bar_width = int(percentage)
+                        
+                        # Color code based on label type
+                        if any(word in label.lower() for word in ["away", "off", "absent", "sleep", "phone"]):
+                            color = "#e74c3c"  # Red for distraction
+                        elif "video" in label.lower() or "social" in label.lower() or "game" in label.lower():
+                            color = "#f39c12"  # Orange for screen distraction
+                        else:
+                            color = "#3498db"  # Blue for neutral
+                        
+                        html += f"""<div style="margin: 5px 0;">
+                        <span style="font-weight: bold; width: 150px; display: inline-block;">{label}:</span>
+                        <span style="display: inline-block; background-color: #ecf0f1; width: 200px; height: 20px; border-radius: 3px; position: relative; overflow: hidden; vertical-align: middle;">
+                            <span style="display: block; background-color: {color}; width: {bar_width}%; height: 100%;"></span>
+                        </span>
+                        <span style="margin-left: 10px; color: {color}; font-weight: bold;">{count}/3 snapshots ({percentage:.0f}%)</span>
+                        </div>"""
+                    
+                    html += "</div>"
+                
+                html += "</div>"
+        else:
+            html += """<div style="background-color: #d4edda; padding: 15px; border-radius: 6px; margin-top: 20px;">
+            <p style="color: #155724; font-size: 16px; margin: 0;">
+            <b>✅ No distractions detected so far!</b><br>
+            Keep up the great focus! 🎯
+            </p>
+            </div>"""
+        
+        # Snapshot Timeline
+        html += """<h2 style="color: #3498db; margin-top: 25px;">📊 Snapshot Timeline</h2>
+        <p style="font-size: 13px; color: #7f8c8d;">Real-time AI analysis results for each snapshot captured:</p>"""
+        
+        # Group snapshots by timestamp (cam + screen pairs)
+        from collections import defaultdict
+        from datetime import datetime
+        
+        snapshot_pairs = defaultdict(list)
+        for snap in snapshots:
+            time_key = snap.captured_at.replace(second=0, microsecond=0) if snap.captured_at else datetime.now()
+            snapshot_pairs[time_key].append(snap)
+        
+        for time_key in sorted(snapshot_pairs.keys(), reverse=True):
+            pair = snapshot_pairs[time_key]
+            html += f"""<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; margin: 8px 0; border-left: 3px solid #3498db;">
+            <p style="margin: 0; font-weight: bold;">⏱️ {time_key.strftime('%H:%M:%S')}</p>"""
+            
+            for snap in pair:
+                snap_type = "📷 Camera" if "cam" in snap.jpeg_path else "🖥️ Screen"
+                
+                if snap.vision_labels:
+                    labels_display = "<br>".join([
+                        f"&nbsp;&nbsp;• <b>{k}</b>: {v:.0%}"
+                        for k, v in sorted(snap.vision_labels.items(), key=lambda x: x[1], reverse=True)[:3]
+                    ])
+                    html += f"""<p style="margin: 5px 0 5px 15px; font-size: 12px;">
+                    {snap_type}: <span style="color: #27ae60;">✓ Analyzed</span><br>
+                    {labels_display}
+                    </p>"""
+                else:
+                    html += f"""<p style="margin: 5px 0 5px 15px; font-size: 12px; color: #95a5a6;">
+                    {snap_type}: Pending analysis...
+                    </p>"""
+            
+            html += "</div>"
+        
+        html += "</div>"
+        
+        text_display.setHtml(html)
+        
+        layout.addWidget(text_display)
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+    
+    def _build_distraction_report(self, events: list, snapshots: list) -> str:
+        """Build detailed HTML report for distraction analysis."""
+        
+        html = """<div style="color: #2c3e50; line-height: 1.6;">"""
+        
+        # Header
+        html += """<h1 style="color: #2c3e50; border-bottom: 3px solid #e74c3c; padding-bottom: 10px;">
+        ⚠️ Distraction Analysis Report</h1>"""
+        
+        # Summary stats
+        distraction_events = [e for e in events if e.event_type == "distraction"]
+        total_snapshots = len(snapshots)
+        
+        html += f"""<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <h3>Overview</h3>
+        <p><b>Total Snapshots Analyzed:</b> {total_snapshots}</p>
+        <p><b>Distraction Events Detected:</b> {len(distraction_events)}</p>
+        <p><b>Hysteresis Voting:</b> K=3 (requires pattern across 3+ consecutive snapshots)</p>
+        <p><b>Minimum Span:</b> 3.5 minutes (prevents false positives from brief glances)</p>
+        </div>"""
+        
+        # Hysteresis Voting Explanation
+        html += """<h2 style="color: #3498db; margin-top: 25px;">🔬 How the Voting Engine Works</h2>
+        <div style="background-color: #e3f2fd; padding: 15px; border-radius: 6px; border-left: 4px solid #3498db;">
+        <p><b>Pattern-Confirmed Detection:</b> The system uses K=3 hysteresis voting to eliminate false positives.</p>
+        <ul>
+            <li>Each snapshot is analyzed by AI (webcam + screen)</li>
+            <li>Results are accumulated in a rolling buffer (last 3 snapshots)</li>
+            <li>A distraction is only flagged if ≥2 of 3 snapshots show the same pattern</li>
+            <li>Minimum 3.5 minute span required across snapshots (debounce)</li>
+            <li>This ensures brief glances don't trigger false alerts</li>
+        </ul>
+        </div>"""
+        
+        # Distraction Events with Voting Details
+        if distraction_events:
+            html += f"""<h2 style="color: #e74c3c; margin-top: 25px;">📋 Detected Distraction Events ({len(distraction_events)})</h2>"""
+            
+            for i, event in enumerate(distraction_events, 1):
+                # Parse event data
+                event_data = event.event_data if isinstance(event.event_data, dict) else {}
+                distraction_type = event_data.get("distraction_type", "Unknown")
+                confidence = event_data.get("confidence", 0) * 100
+                duration = event_data.get("duration_sec", 0) / 60
+                vision_votes = event_data.get("vision_votes", {})
+                
+                html += f"""<div style="background-color: #fff3cd; padding: 15px; border-radius: 6px; margin: 10px 0; border-left: 4px solid #f39c12;">
+                <h3 style="margin-top: 0;">Event #{i}: {distraction_type}</h3>
+                <p><b>Time:</b> {event.timestamp.strftime('%H:%M:%S') if event.timestamp else 'N/A'}</p>
+                <p><b>Duration:</b> {duration:.1f} minutes</p>
+                <p><b>Confidence:</b> {confidence:.0f}%</p>"""
+                
+                # Show voting breakdown
+                if vision_votes:
+                    html += """<h4 style="color: #3498db; margin-top: 15px;">🗳️ Voting Breakdown (K=3 Hysteresis)</h4>
+                    <div style="background-color: white; padding: 10px; border-radius: 4px;">
+                    <p style="font-size: 12px; color: #7f8c8d; margin-bottom: 8px;">
+                    AI classifications across 3 consecutive snapshots:</p>"""
+                    
+                    for label, count in vision_votes.items():
+                        percentage = (count / 3) * 100
+                        bar_width = int(percentage)
+                        
+                        # Color code based on label type
+                        if any(word in label.lower() for word in ["away", "off", "absent", "sleep", "phone"]):
+                            color = "#e74c3c"  # Red for distraction
+                        elif "video" in label.lower() or "social" in label.lower() or "game" in label.lower():
+                            color = "#f39c12"  # Orange for screen distraction
+                        else:
+                            color = "#3498db"  # Blue for neutral
+                        
+                        html += f"""<div style="margin: 5px 0;">
+                        <span style="font-weight: bold; width: 150px; display: inline-block;">{label}:</span>
+                        <span style="display: inline-block; background-color: #ecf0f1; width: 200px; height: 20px; border-radius: 3px; position: relative; overflow: hidden; vertical-align: middle;">
+                            <span style="display: block; background-color: {color}; width: {bar_width}%; height: 100%;"></span>
+                        </span>
+                        <span style="margin-left: 10px; color: {color}; font-weight: bold;">{count}/3 snapshots ({percentage:.0f}%)</span>
+                        </div>"""
+                    
+                    html += "</div>"
+                
+                html += "</div>"
+        else:
+            html += """<div style="background-color: #d4edda; padding: 15px; border-radius: 6px; margin-top: 20px;">
+            <p style="color: #155724; font-size: 16px; margin: 0;">
+            <b>✅ No distractions detected so far!</b><br>
+            Keep up the great focus! 🎯
+            </p>
+            </div>"""
+        
+        # Snapshot Timeline
+        html += """<h2 style="color: #3498db; margin-top: 25px;">📊 Snapshot Timeline</h2>
+        <p style="font-size: 13px; color: #7f8c8d;">Real-time AI analysis results for each snapshot captured:</p>"""
+        
+        # Group snapshots by timestamp (cam + screen pairs)
+        from collections import defaultdict
+        from datetime import datetime
+        
+        snapshot_pairs = defaultdict(list)
+        for snap in snapshots:
+            time_key = snap.captured_at.replace(second=0, microsecond=0) if snap.captured_at else datetime.now()
+            snapshot_pairs[time_key].append(snap)
+        
+        for time_key in sorted(snapshot_pairs.keys(), reverse=True):
+            pair = snapshot_pairs[time_key]
+            html += f"""<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; margin: 8px 0; border-left: 3px solid #3498db;">
+            <p style="margin: 0; font-weight: bold;">⏱️ {time_key.strftime('%H:%M:%S')}</p>"""
+            
+            for snap in pair:
+                snap_type = "📷 Camera" if "cam" in snap.jpeg_path else "🖥️ Screen"
+                
+                if snap.vision_labels:
+                    labels_display = "<br>".join([
+                        f"&nbsp;&nbsp;• <b>{k}</b>: {v:.0%}"
+                        for k, v in sorted(snap.vision_labels.items(), key=lambda x: x[1], reverse=True)[:3]
+                    ])
+                    html += f"""<p style="margin: 5px 0 5px 15px; font-size: 12px;">
+                    {snap_type}: <span style="color: #27ae60;">✓ Analyzed</span><br>
+                    {labels_display}
+                    </p>"""
+                else:
+                    html += f"""<p style="margin: 5px 0 5px 15px; font-size: 12px; color: #95a5a6;">
+                    {snap_type}: Pending analysis...
+                    </p>"""
+            
+            html += "</div>"
+        
+        html += "</div>"
+        
+        return html
 
     def _create_session_card(self, session, cloud_jobs):
         """
