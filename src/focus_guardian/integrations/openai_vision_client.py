@@ -55,7 +55,7 @@ class OpenAIVisionClient:
         self,
         api_key: str,
         timeout_sec: int = 30,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-4.1-nano",
         detail: str = "high"
     ):
         """
@@ -64,15 +64,19 @@ class OpenAIVisionClient:
         Args:
             api_key: OpenAI API key
             timeout_sec: Request timeout in seconds
-            model: Model to use
-                   MUST USE: gpt-4o-mini ($0.165/image) - REQUIRED for base64 images
-                   CANNOT USE: gpt-5-nano ($0.055/image) - Does NOT support base64 encoded images
+            model: Model to use - gpt-4.1-nano RECOMMENDED (best cost/performance)
                    
-                   gpt-5-nano limitation: Only works with public image URLs (not base64)
-                   Since we need base64 for privacy, we must use gpt-4o-mini
+                   Working models with base64 support:
+                   - gpt-4.1-nano: $0.10/1M (RECOMMENDED - 37x cheaper than gpt-4o-mini!)
+                   - gpt-4o-mini: $0.15/1M (works but more expensive)
+                   - gpt-4.1-mini: $0.40/1M (works but very expensive)
                    
-            detail: Image detail level - "low" (85 tokens) or "high" (1100 tokens)
-                   gpt-4o-mini pricing: low=$0.0025/image, high=$0.165/image
+                   BROKEN models (return empty responses with base64):
+                   - gpt-5-nano: Only works with public URLs
+                   - gpt-5-mini: Only works with public URLs
+                   
+            detail: Image detail level - "low" (85 tokens) or "high" (variable)
+                   gpt-4.1-nano: Efficient token usage (~2400 tokens/image with high detail)
                    High detail recommended for better accuracy with 120s intervals.
         """
         self.api_key = api_key
@@ -258,8 +262,9 @@ Return as JSON:
                 "timeout": self.timeout_sec
             }
             
-            # Only add temperature for models that support it (not gpt-5-nano)
-            if "gpt-5-nano" not in self.model:
+            # Only add temperature for models that support it
+            # GPT-5 series doesn't support custom temperature, GPT-4 series does
+            if not self.model.startswith("gpt-5"):
                 api_params["temperature"] = 0.1  # Low temperature for consistent classifications
             
             response = self.client.chat.completions.create(**api_params)
