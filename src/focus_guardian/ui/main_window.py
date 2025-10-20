@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
+from typing import Optional
 
 from ..core.config import Config
 from ..core.database import Database
@@ -3680,7 +3681,7 @@ class MainWindow(QMainWindow):
             view_summary_btn.setToolTip("View AI-generated session summary")
             view_summary_btn.clicked.connect(lambda: self._on_view_saved_summary(session.session_id))
             action_layout.addWidget(view_summary_btn)
-        
+
         # Show Files button
         show_files_btn = QPushButton("📁 Show Files")
         show_files_btn.setStyleSheet("""
@@ -3851,15 +3852,8 @@ class MainWindow(QMainWindow):
                         logger.error(f"Failed to retrieve results for job {job_id}")
 
                 elif status == CloudJobStatus.PROCESSING:
-                    # Job still processing - schedule another check in 30 seconds
-                    logger.info(f"Job {job_id} still processing, will check again in 30 seconds")
-
-                    def retry_check():
-                        if job_id in self.active_refresh_jobs:
-                            self._on_refresh_job(job_id)
-
-                    QTimer.singleShot(30000, retry_check)  # 30 second delay
-                    return  # Don't complete the refresh yet
+                    # Job still processing - will be handled by auto-refresh timer
+                    logger.info(f"Job {job_id} still processing, auto-refresh will check again in 60s")
 
                 elif status == CloudJobStatus.FAILED:
                     # Job failed - log error but don't retry automatically
@@ -4367,18 +4361,18 @@ class MainWindow(QMainWindow):
 
             if active_sessions:
                 num_uploads = len(active_sessions)
-                reply = QMessageBox.warning(
-                    self,
-                    "Uploads In Progress",
-                    f"{num_uploads} cloud upload(s) in progress.\n\n"
-                    "If you quit now, the uploads will be cancelled and you'll need to restart them.\n\n"
-                    "Are you sure you want to quit?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+            reply = QMessageBox.warning(
+                self,
+                "Uploads In Progress",
+                f"{num_uploads} cloud upload(s) in progress.\n\n"
+                "If you quit now, the uploads will be cancelled and you'll need to restart them.\n\n"
+                "Are you sure you want to quit?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
 
-                if reply == QMessageBox.StandardButton.No:
-                    event.ignore()
-                    return
+            if reply == QMessageBox.StandardButton.No:
+                event.ignore()
+                return
 
         # Check for active session
         if self.session_active:
