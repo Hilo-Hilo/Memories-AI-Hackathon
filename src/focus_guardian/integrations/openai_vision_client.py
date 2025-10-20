@@ -193,15 +193,6 @@ Return as JSON:
   "reasoning": "brief explanation of what you see"
 }"""
     
-    @with_circuit_breaker('openai_vision', failure_threshold=3, recovery_timeout=30.0)
-    @handle_error(
-        component='openai_vision_client',
-        operation='classify_image',
-        severity=ErrorSeverity.HIGH,
-        category=ErrorCategory.API,
-        user_visible=True,
-        can_retry=True
-    )
     def _classify_image(
         self,
         image_path: Path,

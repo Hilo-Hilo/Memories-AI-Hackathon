@@ -364,14 +364,18 @@ def handle_error(
                 retry_func = lambda: func(*args, **kwargs)
                 should_retry = error_handler.handle_error(e, context, retry_func)
 
-                if should_retry:
+                if should_retry and context.retry_count < 3:  # Max 3 retries
                     # Implement exponential backoff retry
                     wait_time = min(2 ** context.retry_count, 30)  # Max 30 seconds
                     time.sleep(wait_time)
                     context.retry_count += 1
                     context.last_retry = time.time()
+                    logger.info(f"Retrying {context.component}.{context.operation} (attempt {context.retry_count}/3)")
                     return wrapper(*args, **kwargs)  # Recursive retry
                 else:
+                    # Max retries exceeded or retry not recommended
+                    if context.retry_count >= 3:
+                        logger.error(f"Max retries exceeded for {context.component}.{context.operation}")
                     raise
 
         return wrapper

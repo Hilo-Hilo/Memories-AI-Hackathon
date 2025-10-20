@@ -152,6 +152,12 @@ class SnapshotUploader:
                 except Empty:
                     continue
                 
+                # Check if we're still running before processing
+                if not self._running:
+                    logger.debug(f"Worker {worker_id} stopping, skipping snapshot")
+                    self.upload_queue.task_done()
+                    break
+                
                 # Process snapshot pair
                 self._process_snapshot_pair(snapshot_pair, worker_id)
                 
@@ -159,7 +165,17 @@ class SnapshotUploader:
                 self.upload_queue.task_done()
             
             except Exception as e:
-                logger.error(f"Worker {worker_id} error: {e}", exc_info=True)
+                # Only log errors if we're still supposed to be running
+                if self._running:
+                    logger.error(f"Worker {worker_id} error: {e}", exc_info=True)
+                else:
+                    logger.debug(f"Worker {worker_id} error during shutdown (ignored): {e}")
+                
+                # Make sure to mark task as done even on error
+                try:
+                    self.upload_queue.task_done()
+                except:
+                    pass
         
         logger.debug(f"Worker {worker_id} stopped")
     
