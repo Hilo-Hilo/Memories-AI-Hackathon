@@ -161,14 +161,25 @@ class WebcamRecorder(MP4Recorder):
             frame_interval = 1.0 / self.fps
             import time
             
+            consecutive_failures = 0
+            MAX_CONSECUTIVE_FAILURES = 300  # 30 seconds at 0.1s intervals
+            
             while not self._stop_event.is_set():
                 start_time = time.time()
                 
                 ret, frame = self._camera.read()
                 if not ret or frame is None:
-                    logger.warning("Failed to read frame from camera")
+                    consecutive_failures += 1
+                    logger.warning(f"Failed to read frame from camera ({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES})")
+                    
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        logger.error("Camera failure threshold exceeded, stopping recording")
+                        break
+                    
                     time.sleep(0.1)
                     continue
+                
+                consecutive_failures = 0  # Reset on success
                 
                 # Write frame
                 self._writer.write(frame)

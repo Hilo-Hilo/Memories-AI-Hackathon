@@ -255,15 +255,19 @@ class Database:
             session_id: Session ID to delete
         """
         with self._get_connection() as conn:
-            # Delete in reverse dependency order
-            conn.execute("DELETE FROM session_reports WHERE session_id = ?", (session_id,))
-            conn.execute("DELETE FROM cloud_analysis_jobs WHERE session_id = ?", (session_id,))
-            conn.execute("DELETE FROM distraction_events WHERE session_id = ?", (session_id,))
-            conn.execute("DELETE FROM snapshots WHERE session_id = ?", (session_id,))
-            conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
-            conn.commit()
-
-        logger.info(f"Deleted session and all related records: {session_id}")
+            try:
+                # Delete in reverse dependency order
+                conn.execute("DELETE FROM session_reports WHERE session_id = ?", (session_id,))
+                conn.execute("DELETE FROM cloud_analysis_jobs WHERE session_id = ?", (session_id,))
+                conn.execute("DELETE FROM distraction_events WHERE session_id = ?", (session_id,))
+                conn.execute("DELETE FROM snapshots WHERE session_id = ?", (session_id,))
+                conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+                conn.commit()
+                logger.info(f"Deleted session and all related records: {session_id}")
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"Failed to delete session {session_id}: {e}", exc_info=True)
+                raise
 
     # ========================================================================
     # Snapshot Operations
@@ -618,6 +622,13 @@ class Database:
         error_message: Optional[str] = None
     ) -> None:
         """Update cloud job status and optionally provider_job_id."""
+        # Whitelist of allowed timestamp fields to prevent SQL injection
+        ALLOWED_TIMESTAMP_FIELDS = {
+            "upload_started_at",
+            "processing_started_at", 
+            "processing_completed_at"
+        }
+        
         timestamp_field = None
         timestamp_value = datetime.now().isoformat()
 
@@ -630,6 +641,10 @@ class Database:
 
         with self._get_connection() as conn:
             if timestamp_field:
+                # Validate field name before using in SQL
+                if timestamp_field not in ALLOWED_TIMESTAMP_FIELDS:
+                    raise ValueError(f"Invalid timestamp field: {timestamp_field}")
+                
                 conn.execute(f"""
                     UPDATE cloud_analysis_jobs
                     SET status = ?,

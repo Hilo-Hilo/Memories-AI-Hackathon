@@ -157,7 +157,12 @@ class CloudAnalysisManager:
         screen_video_path: Optional[Path]
     ) -> Optional[str]:
         """
-        Upload videos to Memories.ai.
+        Upload videos to Memories.ai, or reuse existing videos if already uploaded.
+
+        Checks if videos for this session already exist in the cloud:
+        - If videos exist and are processed (PARSE): reuse them
+        - If videos exist but still processing: return existing job
+        - If videos don't exist: upload new videos
 
         Args:
             session_id: Session ID
@@ -167,10 +172,62 @@ class CloudAnalysisManager:
         Returns:
             job_id (UUID) or None if failed
         """
-        job_id = str(uuid.uuid4())
         unique_id = f"focus_session_{session_id}"
 
-        # Create database record
+        # Check for existing Memories.ai job for this session
+        existing_jobs = self.database.get_cloud_jobs_for_session(session_id)
+        existing_memories_job = None
+        for job in existing_jobs:
+            if job.provider == CloudProvider.MEMORIES_AI and job.provider_job_id:
+                existing_memories_job = job
+                break
+
+        # If we have an existing job, check if videos still exist in cloud
+        if existing_memories_job and existing_memories_job.provider_job_id:
+            try:
+                job_data = json.loads(existing_memories_job.provider_job_id)
+                cam_video_no = job_data.get("cam_video_no")
+                screen_video_no = job_data.get("screen_video_no")
+                
+                if cam_video_no:
+                    # Check if videos still exist in cloud
+                    cam_status = self.memories_client.get_video_status(cam_video_no, unique_id)
+                    screen_status = None
+                    if screen_video_no:
+                        import time
+                        time.sleep(1.0)  # Small delay to avoid rate limits
+                        screen_status = self.memories_client.get_video_status(screen_video_no, unique_id)
+                    
+                    # Determine overall status
+                    cam_exists = cam_status is not None
+                    screen_exists = (screen_status is not None) if screen_video_no else True
+                    
+                    if cam_exists and screen_exists:
+                        cam_processed = cam_status.get('status') == 'PARSE'
+                        screen_processed = (screen_status.get('status') == 'PARSE') if screen_video_no else True
+                        
+                        if cam_processed and screen_processed:
+                            # Videos exist and are processed - reuse them!
+                            logger.info(f"Reusing existing processed videos: {cam_video_no}, {screen_video_no}")
+                            # Return existing job ID so it can be queried again
+                            return existing_memories_job.job_id
+                        else:
+                            # Videos exist but still processing
+                            logger.info(f"Videos still processing: cam={cam_status.get('status')}, screen={screen_status.get('status') if screen_status else 'N/A'}")
+                            # Update job status to PROCESSING if not already
+                            if existing_memories_job.status != CloudJobStatus.PROCESSING:
+                                self.database.update_cloud_job_status(
+                                    existing_memories_job.job_id,
+                                    CloudJobStatus.PROCESSING
+                                )
+                            return existing_memories_job.job_id
+                    else:
+                        logger.info(f"Previous videos not found in cloud (cam={cam_exists}, screen={screen_exists}), will upload new ones")
+            except Exception as e:
+                logger.warning(f"Error checking existing videos: {e}, will upload new ones")
+
+        # No existing videos or they were deleted - create new job and upload
+        job_id = str(uuid.uuid4())
         video_type = VideoType.BOTH if screen_video_path else VideoType.WEBCAM
         job = CloudAnalysisJob(
             job_id=job_id,

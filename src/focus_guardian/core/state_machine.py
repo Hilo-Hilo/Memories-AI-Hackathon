@@ -244,8 +244,10 @@ class StateMachine:
         
         first_ts = self._snapshot_buffer[0].timestamp
         last_ts = self._snapshot_buffer[-1].timestamp
+        span = (last_ts - first_ts).total_seconds()
         
-        return (last_ts - first_ts).total_seconds()
+        # Return minimum 0.01 seconds to prevent division by zero
+        return max(span, 0.01)
     
     def get_current_state(self) -> FocusState:
         """Get current state with details."""

@@ -37,7 +37,7 @@ class ScreenCapture:
         if monitor_index == -1:
             self.monitor = monitors[0]  # All monitors combined
             logger.info("Screen capture initialized for all monitors")
-        elif 0 <= monitor_index < len(monitors):
+        elif 0 <= monitor_index + 1 < len(monitors):  # Fixed: check bounds after +1 offset
             self.monitor = monitors[monitor_index + 1]  # +1 because monitors[0] is "all monitors"
             logger.info(f"Screen capture initialized for monitor {monitor_index}")
         else:

@@ -209,7 +209,7 @@ class SnapshotScheduler:
         
         try:
             timestamp = datetime.now()
-            timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
+            timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S_%f")  # Include microseconds to prevent collisions
             
             # Capture camera snapshot
             cam_snapshot_id = str(uuid.uuid4())
