@@ -184,8 +184,8 @@ Make it feel personal and meaningful."""
             executive_response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": executive_prompt}],
-                max_tokens=150,
-                temperature=0.7
+                max_completion_tokens=150,
+                # GPT-5 doesn't support temperature parameter
             )
             executive = executive_response.choices[0].message.content.strip()
 
@@ -203,8 +203,7 @@ Be warm, specific, and data-driven."""
             detailed_response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": detailed_prompt}],
-                max_tokens=300,
-                temperature=0.7
+                max_completion_tokens=300
             )
             detailed = detailed_response.choices[0].message.content.strip()
 
@@ -219,8 +218,7 @@ Format as markdown list."""
             highlights_response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": highlights_prompt}],
-                max_tokens=200,
-                temperature=0.7
+                max_completion_tokens=200
             )
             highlights = highlights_response.choices[0].message.content.strip()
 
@@ -235,8 +233,7 @@ Be genuinely supportive."""
             encouragement_response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": encouragement_prompt}],
-                max_tokens=100,
-                temperature=0.8  # Higher temp for more varied encouragement
+                max_completion_tokens=100
             )
             encouragement = encouragement_response.choices[0].message.content.strip()
 
@@ -315,8 +312,7 @@ Be specific with numbers, warm in tone."""
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=100,
-                temperature=0.7
+                max_completion_tokens=100
             )
 
             return response.choices[0].message.content.strip()

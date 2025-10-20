@@ -198,8 +198,8 @@ class ComprehensiveReportGenerator:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=2000,  # Long-form report
-                temperature=0.7
+                max_completion_tokens=2000,  # Long-form report (GPT-5 uses max_completion_tokens)
+                temperature=0.7 if not self.model.startswith("gpt-5") else None  # GPT-5 doesn't support temperature
             )
 
             report_text = response.choices[0].message.content

@@ -69,6 +69,8 @@ class MainWindow(QMainWindow):
         self.job_last_checked = {}  # Dict[job_id, timestamp] - Track when jobs were last checked
         self.job_auto_refresh_timers = {}  # Dict[job_id, QTimer] - Auto-refresh timers for PROCESSING jobs
         self.generating_reports = set()  # Set[session_id] - Track sessions generating comprehensive reports
+        self.regenerating_hume = set()  # Set[session_id] - Track Hume regenerations
+        self.regenerating_memories = set()  # Set[session_id] - Track Memories regenerations
 
         # Setup UI
         self._setup_ui()
@@ -2158,6 +2160,9 @@ Historical Trends, Snapshot Analysis</p>
         if not session:
             return
         
+        # Mark as regenerating
+        self.regenerating_hume.add(session_id)
+        self._load_sessions_list()  # Update UI to show loading state
         self.status_bar.showMessage("🔄 Regenerating Hume AI analysis...", 3000)
         
         def worker():
@@ -2174,6 +2179,7 @@ Historical Trends, Snapshot Analysis</p>
                 )
                 
                 def done():
+                    self.regenerating_hume.discard(session_id)
                     self._load_sessions_list()
                     self.status_bar.showMessage(f"✅ Hume AI regeneration started! Check status in ~5 minutes.", 10000)
                 
@@ -2181,7 +2187,11 @@ Historical Trends, Snapshot Analysis</p>
                 
             except Exception as e:
                 logger.error(f"Hume regeneration failed: {e}")
-                QTimer.singleShot(0, lambda: self.status_bar.showMessage(f"❌ Failed: {str(e)[:50]}", 10000))
+                def on_error():
+                    self.regenerating_hume.discard(session_id)
+                    self._load_sessions_list()
+                    self.status_bar.showMessage(f"❌ Failed: {str(e)[:50]}", 10000)
+                QTimer.singleShot(0, on_error)
         
         threading.Thread(target=worker, daemon=True).start()
     
@@ -2206,6 +2216,9 @@ Historical Trends, Snapshot Analysis</p>
         if not session:
             return
         
+        # Mark as regenerating
+        self.regenerating_memories.add(session_id)
+        self._load_sessions_list()  # Update UI to show loading state
         self.status_bar.showMessage("🔄 Regenerating Memories.ai analysis...", 3000)
         
         def worker():
@@ -2224,6 +2237,7 @@ Historical Trends, Snapshot Analysis</p>
                 )
                 
                 def done():
+                    self.regenerating_memories.discard(session_id)
                     self._load_sessions_list()
                     self.status_bar.showMessage(f"✅ Memories.ai regeneration started! Check status in ~5 minutes.", 10000)
                 
@@ -2231,7 +2245,11 @@ Historical Trends, Snapshot Analysis</p>
                 
             except Exception as e:
                 logger.error(f"Memories regeneration failed: {e}")
-                QTimer.singleShot(0, lambda: self.status_bar.showMessage(f"❌ Failed: {str(e)[:50]}", 10000))
+                def on_error():
+                    self.regenerating_memories.discard(session_id)
+                    self._load_sessions_list()
+                    self.status_bar.showMessage(f"❌ Failed: {str(e)[:50]}", 10000)
+                QTimer.singleShot(0, on_error)
         
         threading.Thread(target=worker, daemon=True).start()
     
@@ -4106,7 +4124,10 @@ Historical Trends, Snapshot Analysis</p>
             
             # Hume AI regenerate button
             if hume_complete:
-                regen_hume_btn = QPushButton("🔄 Regen Hume AI")
+                is_regen_hume = session.session_id in self.regenerating_hume
+                btn_text = "⏳ Regenerating..." if is_regen_hume else "🔄 Regen Hume AI"
+                regen_hume_btn = QPushButton(btn_text)
+                regen_hume_btn.setEnabled(not is_regen_hume)
                 regen_hume_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #3498db;
@@ -4120,14 +4141,22 @@ Historical Trends, Snapshot Analysis</p>
                     QPushButton:hover {
                         background-color: #2980b9;
                     }
+                    QPushButton:disabled {
+                        background-color: #95a5a6;
+                        color: #ecf0f1;
+                    }
                 """)
-                regen_hume_btn.setToolTip("Regenerate Hume AI emotion analysis (old archived)")
+                tooltip = "Regenerating in background..." if is_regen_hume else "Regenerate Hume AI emotion analysis (old archived)"
+                regen_hume_btn.setToolTip(tooltip)
                 regen_hume_btn.clicked.connect(lambda: self._on_regenerate_hume(session.session_id))
                 regen_layout.addWidget(regen_hume_btn)
             
             # Memories.ai regenerate button
             if memories_complete:
-                regen_memories_btn = QPushButton("🔄 Regen Memories.ai")
+                is_regen_memories = session.session_id in self.regenerating_memories
+                btn_text = "⏳ Regenerating..." if is_regen_memories else "🔄 Regen Memories.ai"
+                regen_memories_btn = QPushButton(btn_text)
+                regen_memories_btn.setEnabled(not is_regen_memories)
                 regen_memories_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #9b59b6;
@@ -4141,8 +4170,13 @@ Historical Trends, Snapshot Analysis</p>
                     QPushButton:hover {
                         background-color: #8e44ad;
                     }
+                    QPushButton:disabled {
+                        background-color: #95a5a6;
+                        color: #ecf0f1;
+                    }
                 """)
-                regen_memories_btn.setToolTip("Regenerate Memories.ai pattern analysis (old archived)")
+                tooltip = "Regenerating in background..." if is_regen_memories else "Regenerate Memories.ai pattern analysis (old archived)"
+                regen_memories_btn.setToolTip(tooltip)
                 regen_memories_btn.clicked.connect(lambda: self._on_regenerate_memories(session.session_id))
                 regen_layout.addWidget(regen_memories_btn)
             
