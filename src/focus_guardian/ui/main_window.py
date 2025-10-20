@@ -353,7 +353,9 @@ class MainWindow(QMainWindow):
         """Refresh styles for all components after theme change."""
         # This method is called during initial theme application
         # The full refresh happens in _toggle_theme() which recreates all tabs
-        pass
+        
+        # Apply button styles to ensure they're properly themed
+        self._apply_button_styles()
     
     def _apply_button_styles(self):
         """Apply modern button styles based on current theme."""
@@ -378,8 +380,10 @@ class MainWindow(QMainWindow):
                     background-color: #2BA048;
                 }}
                 QPushButton:disabled {{
-                    background-color: {colors['text_tertiary']};
-                    opacity: 0.5;
+                    background-color: {colors['bg_tertiary']};
+                    color: {colors['text_tertiary']};
+                    opacity: 0.6;
+                    cursor: not-allowed;
                 }}
             """)
         
@@ -401,8 +405,10 @@ class MainWindow(QMainWindow):
                     background-color: #CC7700;
                 }}
                 QPushButton:disabled {{
-                    background-color: {colors['text_tertiary']};
-                    opacity: 0.5;
+                    background-color: {colors['bg_tertiary']};
+                    color: {colors['text_tertiary']};
+                    opacity: 0.6;
+                    cursor: not-allowed;
                 }}
             """)
         
@@ -424,8 +430,10 @@ class MainWindow(QMainWindow):
                     background-color: #CC2E26;
                 }}
                 QPushButton:disabled {{
-                    background-color: {colors['text_tertiary']};
-                    opacity: 0.5;
+                    background-color: {colors['bg_tertiary']};
+                    color: {colors['text_tertiary']};
+                    opacity: 0.6;
+                    cursor: not-allowed;
                 }}
             """)
     
@@ -2352,9 +2360,34 @@ Return as markdown with clear sections and formatting."""
             font-weight: 600;
         """)
         
+        # Start actual session FIRST before updating UI
+        # This way if it fails, UI never changes
+        try:
+            logger.info("Starting session manager...")
+            self.current_session_id = self.session_manager.start_session(
+                task_name=task_name,
+                quality_profile=QualityProfile.STD,
+                screen_enabled=True
+            )
+            logger.info(f"✅ Session manager started successfully: {self.current_session_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to start session: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Error Starting Session",
+                f"Failed to start session: {str(e)}\n\nCheck that your camera is available and not in use by another application."
+            )
+            # Don't change UI state since session didn't start
+            return
+        
+        # Session started successfully - NOW update UI
+        logger.info("Updating UI for active session...")
+        
         self.start_button.setEnabled(False)
         self.pause_button.setEnabled(True)
         self.stop_button.setEnabled(True)
+        
+        logger.info(f"Button states: start={self.start_button.isEnabled()}, pause={self.pause_button.isEnabled()}, stop={self.stop_button.isEnabled()}")
         
         self.session_active = True
         self.session_start_time = datetime.now()
@@ -2365,28 +2398,7 @@ Return as markdown with clear sections and formatting."""
         self.stats_timer.start(5000)     # Update every 5 seconds
         
         self.status_bar.showMessage("🟢 Focus session started - recording active")
-        
-        # Start actual session
-        try:
-            self.current_session_id = self.session_manager.start_session(
-                task_name=task_name,
-                quality_profile=QualityProfile.STD,
-                screen_enabled=True
-            )
-            logger.info(f"Session manager started: {self.current_session_id}")
-        except Exception as e:
-            logger.error(f"Failed to start session: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to start session: {str(e)}\n\nCheck that your camera is available."
-            )
-            # Revert UI state
-            self.start_button.setEnabled(True)
-            self.pause_button.setEnabled(False)
-            self.stop_button.setEnabled(False)
-            self.session_active = False
-            return
+        logger.info("✅ Session start complete")
     
     def _on_pause_session(self):
         """Handle pause session button click."""
