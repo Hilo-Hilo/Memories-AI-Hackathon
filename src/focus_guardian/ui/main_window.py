@@ -2908,14 +2908,15 @@ class MainWindow(QMainWindow):
             table.setItem(row, 1, QTableWidgetItem(snap_type))
             
             # Status
+            from ..core.models import UploadStatus
             status_map = {
-                "pending": "⏳ Pending",
-                "uploading": "⬆️ Uploading",
-                "completed": "✅ Done",
-                "failed": "❌ Failed"
+                UploadStatus.PENDING: "⏳ Pending",
+                UploadStatus.UPLOADING: "⬆️ Uploading",
+                UploadStatus.SUCCESS: "✅ Done",
+                UploadStatus.FAILED: "❌ Failed"
             }
-            status = status_map.get(snapshot.upload_status, snapshot.upload_status)
-            table.setItem(row, 2, QTableWidgetItem(status))
+            status_text = status_map.get(snapshot.upload_status, str(snapshot.upload_status.value if hasattr(snapshot.upload_status, 'value') else snapshot.upload_status))
+            table.setItem(row, 2, QTableWidgetItem(status_text))
             
             # Labels
             if snapshot.vision_labels:

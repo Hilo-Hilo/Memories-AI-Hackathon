@@ -171,6 +171,15 @@ class SnapshotScheduler:
 
         logger.debug("Scheduler loop started")
 
+        # Take immediate snapshot at session start for instant feedback
+        if self._running and not self._paused:
+            try:
+                logger.info("Capturing initial snapshot at session start...")
+                self._next_capture_time = datetime.now()
+                self._capture_snapshots()
+            except Exception as e:
+                logger.error(f"Failed to capture initial snapshot: {e}", exc_info=True)
+
         while self._running:
             try:
                 # Wait for interval (check _running every 0.5s to allow quick shutdown)

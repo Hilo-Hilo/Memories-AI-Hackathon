@@ -1,5 +1,5 @@
 {
-  "snapshot_interval_sec": 120,
+  "snapshot_interval_sec": 30,
   "video_bitrate_kbps_cam": 500,
   "video_bitrate_kbps_screen": 1000,
   "video_res_profile": "Std",
