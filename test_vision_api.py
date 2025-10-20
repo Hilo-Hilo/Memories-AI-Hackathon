@@ -88,7 +88,8 @@ try:
                 ]
             }
         ],
-        max_completion_tokens=300
+        max_completion_tokens=300,
+        response_format={"type": "json_object"}  # Force JSON output
         # Note: NOT setting temperature - gpt-5-nano only supports default (1)
     )
     

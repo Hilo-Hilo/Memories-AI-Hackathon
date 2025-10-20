@@ -64,9 +64,10 @@ class OpenAIVisionClient:
         Args:
             api_key: OpenAI API key
             timeout_sec: Request timeout in seconds
-            model: Model to use (gpt-4o-mini recommended for reliability)
-                   Options: gpt-4o-mini ($0.165/image), gpt-4o ($0.50/image)
-                   Note: gpt-5-nano has issues with empty responses, not recommended
+            model: Model to use (gpt-4o-mini recommended - gpt-5-nano has empty response bugs)
+                   Options: gpt-4o-mini ($0.165/image) - RECOMMENDED
+                            gpt-5-nano ($0.055/image) - BROKEN (returns empty responses)
+                   Uses response_format for reliable structured JSON output
             detail: Image detail level - "low" (85 tokens) or "high" (1100 tokens)
                    gpt-4o-mini pricing: low=$0.0025/image, high=$0.165/image
                    High detail recommended for better accuracy with 120s intervals.
@@ -231,7 +232,7 @@ Return as JSON:
                 raise VisionAPIError("Failed to encode image to base64")
 
             # Call OpenAI Vision API with enhanced error handling
-            # Note: gpt-5-nano only supports temperature=1 (default)
+            # Use response_format for structured JSON output (works with all models)
             api_params = {
                 "model": self.model,
                 "messages": [
@@ -249,7 +250,8 @@ Return as JSON:
                         ]
                     }
                 ],
-                "max_completion_tokens": 300,  # Changed from max_tokens for newer models (gpt-5-nano, gpt-4o-mini)
+                "max_completion_tokens": 300,
+                "response_format": {"type": "json_object"},  # Force JSON output
                 "timeout": self.timeout_sec
             }
             
@@ -275,24 +277,17 @@ Return as JSON:
             
             # Extract JSON from response
             import json
-            import re
             
             # Log the actual response for debugging
-            logger.debug(f"Vision API response for {kind}: {content[:200]}...")
+            logger.debug(f"Vision API response for {kind}: {content[:200] if content else '(empty)'}...")
             
-            # Try to find JSON in response
-            json_match = re.search(r'\{.*\}', content, re.DOTALL)
-            if json_match:
-                try:
-                    result_data = json.loads(json_match.group())
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse JSON from Vision API response: {e}")
-                    logger.error(f"Content was: {content}")
-                    raise VisionAPIError(f"Invalid JSON in response: {e}")
-            else:
-                logger.warning(f"Could not find JSON in Vision API response: {content}")
-                # Try to extract labels from plain text response
-                result_data = {"labels": {}, "reasoning": content}
+            # With response_format=json_object, the response should be valid JSON
+            try:
+                result_data = json.loads(content)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON from Vision API response: {e}")
+                logger.error(f"Content was: {content}")
+                raise VisionAPIError(f"Invalid JSON in response: {e}")
             
             labels = result_data.get("labels", {})
             reasoning = result_data.get("reasoning", "")
