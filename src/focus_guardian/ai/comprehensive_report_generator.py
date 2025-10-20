@@ -35,7 +35,7 @@ class ComprehensiveReportGenerator:
         """
         self.client = OpenAI(api_key=api_key)
         self.database = database
-        self.model = "gpt-4o-mini"  # Use gpt-4o-mini for comprehensive reports
+        self.model = "gpt-5-nano"  # Cheapest option for text generation ($0.05/1M input, $0.40/1M output)
 
         logger.info("Comprehensive AI report generator initialized")
 

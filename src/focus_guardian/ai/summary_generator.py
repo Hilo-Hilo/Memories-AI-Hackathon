@@ -30,7 +30,7 @@ class AISummaryGenerator:
         """
         self.client = OpenAI(api_key=api_key)
         self.database = database
-        self.model = "gpt-4o-mini"  # Fast and cost-effective for summaries
+        self.model = "gpt-5-nano"  # Cheapest option for text summaries ($0.05/1M input)
 
         logger.info("AI summary generator initialized")
 
