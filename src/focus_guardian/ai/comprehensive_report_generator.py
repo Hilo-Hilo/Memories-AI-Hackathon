@@ -35,7 +35,7 @@ class ComprehensiveReportGenerator:
         """
         self.client = OpenAI(api_key=api_key)
         self.database = database
-        self.model = "gpt-5-nano"  # Cheapest option with intelligent context management
+        self.model = "gpt-4o-mini"  # gpt-5-nano returns empty responses for long-form generation
 
         logger.info("Comprehensive AI report generator initialized")
 
@@ -209,6 +209,15 @@ class ComprehensiveReportGenerator:
             response = self.client.chat.completions.create(**api_params)
 
             report_text = response.choices[0].message.content
+            
+            # Validate report text
+            if not report_text or len(report_text.strip()) == 0:
+                logger.error(f"GPT returned empty response! Model: {self.model}")
+                logger.error(f"Response object: {response}")
+                logger.error(f"Prompt length: {len(prompt)} chars")
+                report_text = "Error: AI returned empty response. This may be a model issue. Please try regenerating or contact support."
+
+            logger.info(f"Generated report: {len(report_text)} characters")
 
             return {
                 "generated_at": datetime.now().isoformat(),
@@ -220,7 +229,8 @@ class ComprehensiveReportGenerator:
                     "historical_data": True,
                     "snapshot_analysis": context.get("snapshots_count", 0) > 0
                 },
-                "token_usage": response.usage.total_tokens if response.usage else 0
+                "token_usage": response.usage.total_tokens if response.usage else 0,
+                "model_used": self.model
             }
 
         except Exception as e:
