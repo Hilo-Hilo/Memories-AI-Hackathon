@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
 from typing import Optional
+import json
 
 from ..core.config import Config
 from ..core.database import Database
@@ -67,6 +68,7 @@ class MainWindow(QMainWindow):
         self.active_refresh_jobs = set()  # Set[job_id] - Track jobs being refreshed
         self.job_last_checked = {}  # Dict[job_id, timestamp] - Track when jobs were last checked
         self.job_auto_refresh_timers = {}  # Dict[job_id, QTimer] - Auto-refresh timers for PROCESSING jobs
+        self.generating_reports = set()  # Set[session_id] - Track sessions generating comprehensive reports
 
         # Setup UI
         self._setup_ui()
@@ -1953,7 +1955,7 @@ class MainWindow(QMainWindow):
         logger.info("User skipped cloud upload")
     
     def _on_generate_comprehensive_report(self, session_id: str):
-        """Generate comprehensive AI report using all available data."""
+        """Generate comprehensive AI report in background (non-blocking)."""
         if not self.comprehensive_report_generator:
             QMessageBox.warning(
                 self,
@@ -1963,26 +1965,20 @@ class MainWindow(QMainWindow):
             return
         
         import threading
-        from PyQt6.QtWidgets import QProgressDialog
         
-        # Show progress dialog
-        progress = QProgressDialog(
-            "Generating comprehensive AI report...\n\n"
-            "This combines Hume AI emotions, Memories.ai patterns,\n"
-            "historical trends, and GPT-4 analysis.\n\n"
-            "This may take 10-30 seconds.",
-            None,
-            0,
-            0,
-            self
-        )
-        progress.setWindowTitle("AI Report Generation")
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setCancelButton(None)
-        progress.show()
+        # Mark as generating
+        self.generating_reports.add(session_id)
+        
+        # Update UI immediately to show generating state
+        self._load_sessions_list()
+        
+        # Show non-blocking status message
+        self.status_bar.showMessage(f"🤖 Generating comprehensive AI report in background...", 5000)
         
         def generate_worker():
             try:
+                logger.info(f"Starting comprehensive report generation for {session_id}")
+                
                 # Load Hume AI results
                 hume_results = None
                 hume_jobs = [j for j in self.database.get_cloud_jobs_for_session(session_id) if j.provider.value == "hume_ai"]
@@ -2007,12 +2003,19 @@ class MainWindow(QMainWindow):
                 # Save report
                 self.comprehensive_report_generator.save_comprehensive_report(session_id, report)
                 
-                # Close progress and show report
+                logger.info(f"Comprehensive report generated successfully for {session_id}")
+                
+                # Update UI on completion
                 def on_complete():
-                    progress.close()
-                    progress.deleteLater()
-                    self._on_view_comprehensive_report(session_id)
-                    self._load_sessions_list()  # Refresh to show new button
+                    # Remove from generating set
+                    if session_id in self.generating_reports:
+                        self.generating_reports.remove(session_id)
+                    
+                    # Refresh UI to show new button
+                    self._load_sessions_list()
+                    
+                    # Show subtle notification
+                    self.status_bar.showMessage("✅ Comprehensive AI report generated! Click to view.", 10000)
                 
                 QTimer.singleShot(0, on_complete)
                 
@@ -2020,13 +2023,15 @@ class MainWindow(QMainWindow):
                 logger.error(f"Failed to generate comprehensive report: {e}", exc_info=True)
                 
                 def on_error():
-                    progress.close()
-                    progress.deleteLater()
-                    QMessageBox.critical(
-                        self,
-                        "Report Generation Failed",
-                        f"Failed to generate AI report:\n\n{str(e)}"
-                    )
+                    # Remove from generating set
+                    if session_id in self.generating_reports:
+                        self.generating_reports.remove(session_id)
+                    
+                    # Refresh UI
+                    self._load_sessions_list()
+                    
+                    # Show error in status bar (non-blocking)
+                    self.status_bar.showMessage(f"❌ AI report generation failed: {str(e)[:50]}", 10000)
                 
                 QTimer.singleShot(0, on_error)
         
@@ -3982,7 +3987,11 @@ Historical Trends, Snapshot Analysis</p>
                 row += 1
             else:
                 # Can generate report - show generate button
-                generate_btn = QPushButton("🤖 Generate Comprehensive AI Report")
+                is_generating = session.session_id in self.generating_reports
+                
+                btn_text = "🔄 Generating AI Report..." if is_generating else "🤖 Generate Comprehensive AI Report"
+                generate_btn = QPushButton(btn_text)
+                generate_btn.setEnabled(not is_generating)
                 generate_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #e67e22;
@@ -3996,8 +4005,13 @@ Historical Trends, Snapshot Analysis</p>
                     QPushButton:hover {
                         background-color: #d35400;
                     }
+                    QPushButton:disabled {
+                        background-color: #95a5a6;
+                        color: #ecf0f1;
+                    }
                 """)
-                generate_btn.setToolTip("Generate long-form AI report using Hume AI, Memories.ai, and historical data")
+                tooltip = "Generating report in background..." if is_generating else "Generate long-form AI report using Hume AI, Memories.ai, and historical data"
+                generate_btn.setToolTip(tooltip)
                 generate_btn.clicked.connect(lambda: self._on_generate_comprehensive_report(session.session_id))
                 layout.addWidget(generate_btn, row, 0, 1, 2)
                 row += 1
