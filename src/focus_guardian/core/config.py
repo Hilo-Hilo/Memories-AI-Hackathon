@@ -877,4 +877,40 @@ class Config:
         """Get version history for a prompt type."""
         versions = self._user_config.get("prompt_versions", [])
         return [v for v in versions if v["type"] == prompt_type]
+    
+    # ========================================================================
+    # Public API - Label Profiles
+    # ========================================================================
+    
+    def get_label_profiles_manager(self):
+        """
+        Get LabelProfileManager instance.
+        
+        Returns:
+            LabelProfileManager for managing label profiles
+        """
+        from .label_profiles import LabelProfileManager
+        
+        profiles_path = self.config_dir / "label_profiles.yaml"
+        return LabelProfileManager(profiles_path)
+    
+    def get_active_profile_name(self) -> str:
+        """
+        Get the last used/default label profile name.
+        
+        Returns:
+            Profile name (defaults to "Default")
+        """
+        return str(self._get_config_value("active_label_profile", "Default"))
+    
+    def set_active_profile_name(self, profile_name: str) -> None:
+        """
+        Set the default label profile for new sessions.
+        
+        Args:
+            profile_name: Profile name to use as default
+        """
+        self._user_config["active_label_profile"] = profile_name
+        self._save_user_config()
+        logger.info(f"Active label profile set to: {profile_name}")
 

@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     screen_enabled INTEGER NOT NULL,  -- Boolean: 0 or 1
     status TEXT NOT NULL,       -- active | paused | completed | failed
     
+    -- Label profile for this session (v1.5)
+    label_profile_name TEXT NOT NULL DEFAULT 'Default',
+    
     -- Paths (relative to data directory)
     cam_mp4_path TEXT NOT NULL,
     screen_mp4_path TEXT,

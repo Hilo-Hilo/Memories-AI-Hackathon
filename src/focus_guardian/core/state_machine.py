@@ -3,10 +3,12 @@ State machine for focus state tracking with K=3 hysteresis voting.
 
 Implements the core pattern detection logic: requires K consecutive snapshots
 spanning ≥1 minute to confirm a state transition, eliminating false positives.
+
+Now supports dynamic label profiles for customizable detection.
 """
 
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Set
 from collections import deque
 
 from ..core.models import (
@@ -22,17 +24,40 @@ logger = get_logger(__name__)
 class StateMachine:
     """State machine with K-snapshot hysteresis voting."""
     
-    def __init__(self, K: int = 3, min_span_minutes: float = 1.0):
+    def __init__(
+        self,
+        K: int = 3,
+        min_span_minutes: float = 1.0,
+        label_profile=None  # Optional LabelProfile instance
+    ):
         """
         Initialize state machine.
         
         Args:
             K: Number of snapshots for hysteresis voting (default 3)
             min_span_minutes: Minimum time span across K snapshots (default 1.0)
+            label_profile: Optional LabelProfile for custom labels (uses hardcoded if None)
         """
         self.K = K
         self.min_span_minutes = min_span_minutes
         self.min_span_seconds = min_span_minutes * 60
+        
+        # Label sets for voting (dynamic or hardcoded fallback)
+        if label_profile:
+            self.cam_distraction_labels = label_profile.get_cam_labels_by_category("distraction")
+            self.cam_focus_labels = label_profile.get_cam_labels_by_category("focus")
+            self.cam_absence_labels = label_profile.get_cam_labels_by_category("absence")
+            self.screen_distraction_labels = label_profile.get_screen_labels_by_category("distraction")
+            self.screen_focus_labels = label_profile.get_screen_labels_by_category("focus")
+            logger.info(f"State machine using custom label profile: {label_profile.name}")
+        else:
+            # Fallback to hardcoded labels
+            self.cam_distraction_labels = CAM_DISTRACTION_LABELS
+            self.cam_focus_labels = CAM_FOCUS_LABELS
+            self.cam_absence_labels = CAM_ABSENCE_LABELS
+            self.screen_distraction_labels = SCREEN_DISTRACTION_LABELS
+            self.screen_focus_labels = SCREEN_FOCUS_LABELS
+            logger.info("State machine using hardcoded labels (no profile specified)")
         
         # Current state
         self._current_state = State.FOCUSED
@@ -134,8 +159,8 @@ class StateMachine:
         majority_threshold = max(2, self.K // 2 + 1)  # At least 2, or majority
         
         # Check for absence (highest priority)
-        if self._has_majority(cam_label_counts, CAM_ABSENCE_LABELS, majority_threshold):
-            avg_conf = self._get_average_confidence(cam_label_counts, CAM_ABSENCE_LABELS)
+        if self._has_majority(cam_label_counts, self.cam_absence_labels, majority_threshold):
+            avg_conf = self._get_average_confidence(cam_label_counts, self.cam_absence_labels)
             return State.ABSENT, avg_conf, {
                 "cam_labels": cam_label_counts,
                 "screen_labels": screen_label_counts,
@@ -144,20 +169,20 @@ class StateMachine:
         
         # Check for distraction
         cam_distracted = self._has_majority(
-            cam_label_counts, CAM_DISTRACTION_LABELS, majority_threshold
+            cam_label_counts, self.cam_distraction_labels, majority_threshold
         )
         screen_distracted = self._has_majority(
-            screen_label_counts, SCREEN_DISTRACTION_LABELS, majority_threshold
+            screen_label_counts, self.screen_distraction_labels, majority_threshold
         )
         
         if cam_distracted or screen_distracted:
             # Calculate combined confidence
             cam_conf = self._get_average_confidence(
-                cam_label_counts, CAM_DISTRACTION_LABELS
+                cam_label_counts, self.cam_distraction_labels
             ) if cam_distracted else 0.0
             
             screen_conf = self._get_average_confidence(
-                screen_label_counts, SCREEN_DISTRACTION_LABELS
+                screen_label_counts, self.screen_distraction_labels
             ) if screen_distracted else 0.0
             
             # Weight: camera evidence slightly higher (70% cam, 30% screen)
@@ -173,19 +198,19 @@ class StateMachine:
         
         # Check for focus
         cam_focused = self._has_majority(
-            cam_label_counts, CAM_FOCUS_LABELS, majority_threshold
+            cam_label_counts, self.cam_focus_labels, majority_threshold
         )
         screen_focused = self._has_majority(
-            screen_label_counts, SCREEN_FOCUS_LABELS, majority_threshold
+            screen_label_counts, self.screen_focus_labels, majority_threshold
         )
         
         if cam_focused or screen_focused:
             cam_conf = self._get_average_confidence(
-                cam_label_counts, CAM_FOCUS_LABELS
+                cam_label_counts, self.cam_focus_labels
             ) if cam_focused else 0.0
             
             screen_conf = self._get_average_confidence(
-                screen_label_counts, SCREEN_FOCUS_LABELS
+                screen_label_counts, self.screen_focus_labels
             ) if screen_focused else 0.0
             
             # Weight: camera evidence slightly higher

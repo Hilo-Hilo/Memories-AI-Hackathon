@@ -108,13 +108,16 @@ class Session:
     quality_profile: QualityProfile    # Low | Std | High
     screen_enabled: bool               # Screen capture toggle
     status: SessionStatus              # Active | Paused | Completed | Failed
+    
+    # Label profile for this session (v1.5)
+    label_profile_name: str = "Default"  # Profile name from label_profiles.yaml
 
     # Paths (relative to data directory)
-    cam_mp4_path: str                  # sessions/<id>/cam.mp4
-    screen_mp4_path: Optional[str]     # sessions/<id>/screen.mp4
-    snapshots_dir: str                 # sessions/<id>/snapshots/
-    vision_dir: str                    # sessions/<id>/vision/
-    logs_dir: str                      # sessions/<id>/logs/
+    cam_mp4_path: str = ""             # sessions/<id>/cam.mp4
+    screen_mp4_path: Optional[str] = None  # sessions/<id>/screen.mp4
+    snapshots_dir: str = ""            # sessions/<id>/snapshots/
+    vision_dir: str = ""               # sessions/<id>/vision/
+    logs_dir: str = ""                 # sessions/<id>/logs/
 
     # Statistics
     total_snapshots: int = 0           # Count of captured snapshots

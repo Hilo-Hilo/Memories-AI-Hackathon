@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QPushButton, QLabel, QStatusBar,
     QSystemTrayIcon, QMenu, QMessageBox, QApplication,
-    QCheckBox, QTableWidget, QDialog
+    QCheckBox, QTableWidget, QDialog, QTableWidgetItem
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
@@ -524,6 +524,44 @@ class MainWindow(QMainWindow):
         """)
         layout.addWidget(hint_label)
         
+        # Label profile selector
+        profile_label = QLabel("Label Profile:")
+        profile_label.setStyleSheet(f"""
+            font-size: 14px;
+            font-weight: 600;
+            color: {colors['text_primary']};
+            margin-top: 16px;
+        """)
+        layout.addWidget(profile_label)
+        
+        profile_combo = QComboBox()
+        try:
+            # Load available profiles
+            profile_manager = self.config.get_label_profiles_manager()
+            available_profiles = profile_manager.list_profiles()
+            profile_combo.addItems(available_profiles)
+            
+            # Set to active profile
+            active_profile = self.config.get_active_profile_name()
+            if active_profile in available_profiles:
+                profile_combo.setCurrentText(active_profile)
+            
+        except Exception as e:
+            logger.error(f"Failed to load label profiles: {e}")
+            profile_combo.addItem("Default")
+        
+        layout.addWidget(profile_combo)
+        
+        # Profile hint
+        profile_hint = QLabel("Different profiles detect different behaviors (configure in Settings)")
+        profile_hint.setStyleSheet(f"""
+            font-size: 11px;
+            color: {colors['text_secondary']};
+            font-style: italic;
+            margin-bottom: 8px;
+        """)
+        layout.addWidget(profile_hint)
+        
         # Buttons
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -545,9 +583,18 @@ class MainWindow(QMainWindow):
         # Show dialog
         if dialog.exec() == QDialog.DialogCode.Accepted:
             task_name = task_input.currentText().strip()
+            selected_profile = profile_combo.currentText()
+            
             if task_name:
                 # Save to history
                 self._save_task_to_history(task_name)
+                
+                # Save selected profile as active
+                self.config.set_active_profile_name(selected_profile)
+                
+                # Store selected profile for session start
+                self._selected_profile_name = selected_profile
+                
                 return task_name
         
         return None  # User cancelled
@@ -1343,19 +1390,23 @@ class MainWindow(QMainWindow):
         warning_label.setWordWrap(True)
         layout.addWidget(warning_label)
         
-        # Section 1: Snapshot Vision Prompts
+        # Section 1: Label Profiles (NEW)
+        label_profiles_group = self._create_label_profiles_section()
+        layout.addWidget(label_profiles_group)
+        
+        # Section 2: Snapshot Vision Prompts
         vision_group = self._create_snapshot_prompts_section()
         layout.addWidget(vision_group)
         
-        # Section 2: Memories.ai Prompt
+        # Section 3: Memories.ai Prompt
         memories_group = self._create_memories_prompt_section()
         layout.addWidget(memories_group)
         
-        # Section 3: Comprehensive Report Template
+        # Section 4: Comprehensive Report Template
         comprehensive_group = self._create_comprehensive_prompt_section()
         layout.addWidget(comprehensive_group)
         
-        # Section 4: Snapshot Debugging
+        # Section 5: Snapshot Debugging
         debug_group = self._create_snapshot_debug_section()
         layout.addWidget(debug_group)
         
@@ -1407,6 +1458,641 @@ class MainWindow(QMainWindow):
         else:
             self.settings_tabs.setCurrentIndex(0)  # Switch back to general
             logger.info("Developer options disabled")
+    
+    def _create_label_profiles_section(self) -> QWidget:
+        """Create label profiles editor section."""
+        from PyQt6.QtWidgets import (
+            QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView,
+            QHBoxLayout, QVBoxLayout, QComboBox, QPushButton, QLabel,
+            QDialog, QLineEdit, QTextEdit, QDoubleSpinBox, QMessageBox
+        )
+        
+        colors = self._get_colors()
+        
+        group = QGroupBox("🏷️ Label Profiles")
+        group.setStyleSheet(f"""
+            QGroupBox {{
+                font-size: 16px;
+                font-weight: 600;
+                color: {colors['text_primary']};
+                border: 2px solid {colors['border']};
+                border-radius: 8px;
+                margin-top: 12px;
+                padding-top: 16px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 8px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(group)
+        
+        # Description
+        desc_label = QLabel(
+            "Customize detection labels for different session types. "
+            "Each profile defines what behaviors to detect (HeadAway, VideoOnScreen, etc.) "
+            "and how to classify them (distraction vs focus)."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet(f"color: {colors['text_secondary']}; margin-bottom: 15px;")
+        layout.addWidget(desc_label)
+        
+        # Profile selector and management buttons
+        profile_controls = QHBoxLayout()
+        
+        profile_select_label = QLabel("Profile:")
+        profile_select_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
+        profile_controls.addWidget(profile_select_label)
+        
+        self.profile_selector = QComboBox()
+        self.profile_selector.setMinimumWidth(200)
+        self.profile_selector.currentTextChanged.connect(self._on_profile_selected)
+        profile_controls.addWidget(self.profile_selector)
+        
+        new_profile_btn = QPushButton("+ New Profile")
+        new_profile_btn.clicked.connect(self._on_new_profile)
+        new_profile_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_green']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {colors['accent_green']};
+                opacity: 0.9;
+            }}
+        """)
+        profile_controls.addWidget(new_profile_btn)
+        
+        delete_profile_btn = QPushButton("Delete Profile")
+        delete_profile_btn.clicked.connect(self._on_delete_profile)
+        delete_profile_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_red']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {colors['accent_red']};
+                opacity: 0.9;
+            }}
+        """)
+        profile_controls.addWidget(delete_profile_btn)
+        
+        profile_controls.addStretch()
+        layout.addLayout(profile_controls)
+        
+        # Profile description display
+        self.profile_desc_label = QLabel("")
+        self.profile_desc_label.setWordWrap(True)
+        self.profile_desc_label.setStyleSheet(f"""
+            color: {colors['text_secondary']};
+            font-style: italic;
+            padding: 8px;
+            background-color: {colors['bg_tertiary']};
+            border-radius: 4px;
+            margin: 8px 0;
+        """)
+        layout.addWidget(self.profile_desc_label)
+        
+        # Camera labels table
+        cam_label = QLabel("📷 Camera Labels")
+        cam_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {colors['text_primary']}; margin-top: 12px;")
+        layout.addWidget(cam_label)
+        
+        self.cam_labels_table = QTableWidget()
+        self.cam_labels_table.setColumnCount(4)
+        self.cam_labels_table.setHorizontalHeaderLabels(["Label", "Category", "Threshold", "Description"])
+        self.cam_labels_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.cam_labels_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.cam_labels_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.cam_labels_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.cam_labels_table.setMaximumHeight(200)
+        self.cam_labels_table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+            }}
+            QHeaderView::section {{
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_primary']};
+                padding: 6px;
+                border: none;
+                font-weight: 600;
+            }}
+        """)
+        layout.addWidget(self.cam_labels_table)
+        
+        # Camera labels buttons
+        cam_btn_layout = QHBoxLayout()
+        add_cam_label_btn = QPushButton("+ Add Camera Label")
+        add_cam_label_btn.clicked.connect(lambda: self._on_add_label("cam"))
+        add_cam_label_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+        """)
+        cam_btn_layout.addWidget(add_cam_label_btn)
+        
+        edit_cam_label_btn = QPushButton("Edit Selected")
+        edit_cam_label_btn.clicked.connect(lambda: self._on_edit_label("cam"))
+        cam_btn_layout.addWidget(edit_cam_label_btn)
+        
+        remove_cam_label_btn = QPushButton("Remove Selected")
+        remove_cam_label_btn.clicked.connect(lambda: self._on_remove_label("cam"))
+        remove_cam_label_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_red']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+        """)
+        cam_btn_layout.addWidget(remove_cam_label_btn)
+        cam_btn_layout.addStretch()
+        layout.addLayout(cam_btn_layout)
+        
+        # Screen labels table
+        screen_label = QLabel("🖥️ Screen Labels")
+        screen_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {colors['text_primary']}; margin-top: 16px;")
+        layout.addWidget(screen_label)
+        
+        self.screen_labels_table = QTableWidget()
+        self.screen_labels_table.setColumnCount(4)
+        self.screen_labels_table.setHorizontalHeaderLabels(["Label", "Category", "Threshold", "Description"])
+        self.screen_labels_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.screen_labels_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.screen_labels_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.screen_labels_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.screen_labels_table.setMaximumHeight(200)
+        self.screen_labels_table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+            }}
+            QHeaderView::section {{
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_primary']};
+                padding: 6px;
+                border: none;
+                font-weight: 600;
+            }}
+        """)
+        layout.addWidget(self.screen_labels_table)
+        
+        # Screen labels buttons
+        screen_btn_layout = QHBoxLayout()
+        add_screen_label_btn = QPushButton("+ Add Screen Label")
+        add_screen_label_btn.clicked.connect(lambda: self._on_add_label("screen"))
+        add_screen_label_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+        """)
+        screen_btn_layout.addWidget(add_screen_label_btn)
+        
+        edit_screen_label_btn = QPushButton("Edit Selected")
+        edit_screen_label_btn.clicked.connect(lambda: self._on_edit_label("screen"))
+        screen_btn_layout.addWidget(edit_screen_label_btn)
+        
+        remove_screen_label_btn = QPushButton("Remove Selected")
+        remove_screen_label_btn.clicked.connect(lambda: self._on_remove_label("screen"))
+        remove_screen_label_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_red']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+        """)
+        screen_btn_layout.addWidget(remove_screen_label_btn)
+        screen_btn_layout.addStretch()
+        layout.addLayout(screen_btn_layout)
+        
+        # Load initial profile
+        self._load_profile_list()
+        
+        return group
+    
+    def _load_profile_list(self):
+        """Load available profiles into selector dropdown."""
+        try:
+            profile_manager = self.config.get_label_profiles_manager()
+            profiles = profile_manager.list_profiles()
+            
+            current = self.profile_selector.currentText()
+            self.profile_selector.clear()
+            self.profile_selector.addItems(profiles)
+            
+            # Restore selection or use active profile
+            if current and current in profiles:
+                self.profile_selector.setCurrentText(current)
+            else:
+                active = self.config.get_active_profile_name()
+                if active in profiles:
+                    self.profile_selector.setCurrentText(active)
+                    
+            logger.info(f"Loaded {len(profiles)} label profiles")
+            
+        except Exception as e:
+            logger.error(f"Failed to load profiles: {e}")
+    
+    def _on_profile_selected(self, profile_name: str):
+        """Handle profile selection change."""
+        from PyQt6.QtWidgets import QTableWidgetItem
+        
+        if not profile_name:
+            return
+        
+        try:
+            profile_manager = self.config.get_label_profiles_manager()
+            profile = profile_manager.get_profile(profile_name)
+            
+            if not profile:
+                return
+            
+            # Update description
+            self.profile_desc_label.setText(f"Description: {profile.description}")
+            
+            # Load camera labels into table
+            self.cam_labels_table.setRowCount(0)
+            for row, (label_name, label_def) in enumerate(sorted(profile.cam_labels.items())):
+                self.cam_labels_table.insertRow(row)
+                self.cam_labels_table.setItem(row, 0, QTableWidgetItem(label_name))
+                self.cam_labels_table.setItem(row, 1, QTableWidgetItem(label_def.category))
+                self.cam_labels_table.setItem(row, 2, QTableWidgetItem(f"{label_def.threshold:.2f}"))
+                self.cam_labels_table.setItem(row, 3, QTableWidgetItem(label_def.description))
+            
+            # Load screen labels into table
+            self.screen_labels_table.setRowCount(0)
+            for row, (label_name, label_def) in enumerate(sorted(profile.screen_labels.items())):
+                self.screen_labels_table.insertRow(row)
+                self.screen_labels_table.setItem(row, 0, QTableWidgetItem(label_name))
+                self.screen_labels_table.setItem(row, 1, QTableWidgetItem(label_def.category))
+                self.screen_labels_table.setItem(row, 2, QTableWidgetItem(f"{label_def.threshold:.2f}"))
+                self.screen_labels_table.setItem(row, 3, QTableWidgetItem(label_def.description))
+            
+            logger.info(f"Loaded profile '{profile_name}': {len(profile.cam_labels)} cam labels, {len(profile.screen_labels)} screen labels")
+            
+        except Exception as e:
+            logger.error(f"Failed to load profile: {e}")
+    
+    def _on_new_profile(self):
+        """Create new label profile."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QTextEdit, QDialogButtonBox, QLabel, QComboBox
+        
+        colors = self._get_colors()
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Create New Label Profile")
+        dialog.setMinimumWidth(500)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Profile name
+        name_label = QLabel("Profile Name:")
+        name_label.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']};")
+        layout.addWidget(name_label)
+        
+        name_input = QLineEdit()
+        name_input.setPlaceholderText("e.g., Coding_Focus, Writing_Mode, Deep_Work")
+        layout.addWidget(name_input)
+        
+        # Description
+        desc_label = QLabel("Description:")
+        desc_label.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']}; margin-top: 12px;")
+        layout.addWidget(desc_label)
+        
+        desc_input = QTextEdit()
+        desc_input.setPlaceholderText("Describe what this profile is for...")
+        desc_input.setMaximumHeight(80)
+        layout.addWidget(desc_input)
+        
+        # Clone from existing
+        clone_label = QLabel("Clone from existing profile:")
+        clone_label.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']}; margin-top: 12px;")
+        layout.addWidget(clone_label)
+        
+        clone_combo = QComboBox()
+        clone_combo.addItem("(Start empty)")
+        try:
+            profile_manager = self.config.get_label_profiles_manager()
+            clone_combo.addItems(profile_manager.list_profiles())
+        except:
+            pass
+        layout.addWidget(clone_combo)
+        
+        # Buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            profile_name = name_input.text().strip()
+            description = desc_input.toPlainText().strip()
+            clone_from = clone_combo.currentText() if clone_combo.currentIndex() > 0 else None
+            
+            if not profile_name:
+                QMessageBox.warning(self, "Invalid Name", "Please enter a profile name")
+                return
+            
+            try:
+                profile_manager = self.config.get_label_profiles_manager()
+                profile_manager.create_profile(profile_name, description, clone_from)
+                
+                # Reload and select new profile
+                self._load_profile_list()
+                self.profile_selector.setCurrentText(profile_name)
+                
+                QMessageBox.information(
+                    self,
+                    "Profile Created",
+                    f"Label profile '{profile_name}' created successfully!"
+                )
+                
+            except ValueError as e:
+                QMessageBox.warning(self, "Error", str(e))
+            except Exception as e:
+                logger.error(f"Failed to create profile: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to create profile:\n{e}")
+    
+    def _on_delete_profile(self):
+        """Delete current profile."""
+        profile_name = self.profile_selector.currentText()
+        
+        if profile_name == "Default":
+            QMessageBox.warning(
+                self,
+                "Cannot Delete",
+                "The Default profile cannot be deleted."
+            )
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Profile",
+            f"Are you sure you want to delete the profile '{profile_name}'?\n\n"
+            "This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                profile_manager = self.config.get_label_profiles_manager()
+                success = profile_manager.delete_profile(profile_name)
+                
+                if success:
+                    self._load_profile_list()
+                    QMessageBox.information(self, "Deleted", f"Profile '{profile_name}' deleted")
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to delete profile")
+                    
+            except Exception as e:
+                logger.error(f"Failed to delete profile: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to delete profile:\n{e}")
+    
+    def _on_add_label(self, label_type: str):
+        """Add new label to current profile."""
+        profile_name = self.profile_selector.currentText()
+        
+        if not profile_name:
+            return
+        
+        # Show label editor dialog
+        label_def = self._show_label_editor_dialog(None, label_type)
+        
+        if label_def:
+            try:
+                profile_manager = self.config.get_label_profiles_manager()
+                profile_manager.add_label_to_profile(profile_name, label_type, label_def)
+                
+                # Reload profile display
+                self._on_profile_selected(profile_name)
+                
+                self.status_bar.showMessage(f"✅ Added {label_type} label '{label_def.name}'", 3000)
+                
+            except ValueError as e:
+                QMessageBox.warning(self, "Error", str(e))
+            except Exception as e:
+                logger.error(f"Failed to add label: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to add label:\n{e}")
+    
+    def _on_edit_label(self, label_type: str):
+        """Edit selected label."""
+        table = self.cam_labels_table if label_type == "cam" else self.screen_labels_table
+        selected_rows = table.selectedItems()
+        
+        if not selected_rows:
+            QMessageBox.information(self, "No Selection", "Please select a label to edit")
+            return
+        
+        row = selected_rows[0].row()
+        label_name = table.item(row, 0).text()
+        category = table.item(row, 1).text()
+        threshold = float(table.item(row, 2).text())
+        description = table.item(row, 3).text()
+        
+        # Create current label def for editing
+        from ..core.label_profiles import LabelDefinition
+        current_label = LabelDefinition(label_name, category, threshold, description)
+        
+        # Show editor
+        updated_label = self._show_label_editor_dialog(current_label, label_type)
+        
+        if updated_label:
+            profile_name = self.profile_selector.currentText()
+            
+            try:
+                profile_manager = self.config.get_label_profiles_manager()
+                profile = profile_manager.get_profile(profile_name)
+                
+                # Update the label in the profile
+                if label_type == "cam":
+                    profile.cam_labels[label_name] = updated_label
+                else:
+                    profile.screen_labels[label_name] = updated_label
+                
+                profile_manager.update_profile(profile)
+                
+                # Reload display
+                self._on_profile_selected(profile_name)
+                
+                self.status_bar.showMessage(f"✅ Updated label '{label_name}'", 3000)
+                
+            except Exception as e:
+                logger.error(f"Failed to edit label: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to edit label:\n{e}")
+    
+    def _on_remove_label(self, label_type: str):
+        """Remove selected label from profile."""
+        table = self.cam_labels_table if label_type == "cam" else self.screen_labels_table
+        selected_rows = table.selectedItems()
+        
+        if not selected_rows:
+            QMessageBox.information(self, "No Selection", "Please select a label to remove")
+            return
+        
+        row = selected_rows[0].row()
+        label_name = table.item(row, 0).text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Remove Label",
+            f"Remove label '{label_name}' from this profile?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            profile_name = self.profile_selector.currentText()
+            
+            try:
+                profile_manager = self.config.get_label_profiles_manager()
+                profile_manager.remove_label_from_profile(profile_name, label_type, label_name)
+                
+                # Reload display
+                self._on_profile_selected(profile_name)
+                
+                self.status_bar.showMessage(f"✅ Removed label '{label_name}'", 3000)
+                
+            except Exception as e:
+                logger.error(f"Failed to remove label: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to remove label:\n{e}")
+    
+    def _show_label_editor_dialog(self, current_label, label_type: str):
+        """
+        Show dialog to create/edit a label.
+        
+        Args:
+            current_label: LabelDefinition to edit (None for new label)
+            label_type: "cam" or "screen"
+            
+        Returns:
+            LabelDefinition if saved, None if cancelled
+        """
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QFormLayout, QLineEdit, QTextEdit,
+            QComboBox, QDoubleSpinBox, QDialogButtonBox, QLabel
+        )
+        from ..core.label_profiles import LabelDefinition
+        
+        colors = self._get_colors()
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Label" if current_label else "Add New Label")
+        dialog.setMinimumWidth(500)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        
+        # Label name
+        name_input = QLineEdit()
+        if current_label:
+            name_input.setText(current_label.name)
+            name_input.setReadOnly(True)  # Can't change name when editing
+        else:
+            name_input.setPlaceholderText("e.g., HeadAway, StandingUp, VideoOnScreen")
+        form.addRow("Label Name:", name_input)
+        
+        # Category
+        category_combo = QComboBox()
+        category_combo.addItems(["distraction", "focus", "absence", "borderline", "neutral"])
+        if current_label:
+            category_combo.setCurrentText(current_label.category)
+        form.addRow("Category:", category_combo)
+        
+        # Threshold
+        threshold_spin = QDoubleSpinBox()
+        threshold_spin.setRange(0.0, 1.0)
+        threshold_spin.setSingleStep(0.05)
+        threshold_spin.setDecimals(2)
+        if current_label:
+            threshold_spin.setValue(current_label.threshold)
+        else:
+            threshold_spin.setValue(0.70)
+        form.addRow("Confidence Threshold:", threshold_spin)
+        
+        # Description
+        desc_input = QTextEdit()
+        desc_input.setMaximumHeight(80)
+        if current_label:
+            desc_input.setPlainText(current_label.description)
+        else:
+            desc_input.setPlaceholderText("Describe what this label detects...")
+        form.addRow("Description:", desc_input)
+        
+        layout.addLayout(form)
+        
+        # Help text
+        help_text = QLabel(
+            "• Category determines how this label affects focus detection\n"
+            "• Threshold is minimum confidence (0.0-1.0) required to trigger\n"
+            "• Higher thresholds = fewer false positives, may miss some events"
+        )
+        help_text.setWordWrap(True)
+        help_text.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px; margin-top: 8px;")
+        layout.addWidget(help_text)
+        
+        # Buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            label_name = name_input.text().strip()
+            category = category_combo.currentText()
+            threshold = threshold_spin.value()
+            description = desc_input.toPlainText().strip()
+            
+            if not label_name:
+                QMessageBox.warning(self, "Invalid Input", "Label name is required")
+                return None
+            
+            return LabelDefinition(
+                name=label_name,
+                category=category,
+                threshold=threshold,
+                description=description or f"{label_name} detection"
+            )
+        
+        return None
     
     def _create_snapshot_prompts_section(self) -> QWidget:
         """Create snapshot vision prompts editing section."""
@@ -2364,10 +3050,15 @@ Return as markdown with clear sections and formatting."""
         # This way if it fails, UI never changes
         try:
             logger.info("Starting session manager...")
+            
+            # Get selected profile name (stored when dialog accepted)
+            profile_name = getattr(self, '_selected_profile_name', None)
+            
             self.current_session_id = self.session_manager.start_session(
                 task_name=task_name,
                 quality_profile=QualityProfile.STD,
-                screen_enabled=True
+                screen_enabled=True,
+                label_profile_name=profile_name
             )
             logger.info(f"✅ Session manager started successfully: {self.current_session_id}")
         except Exception as e:
@@ -2388,6 +3079,7 @@ Return as markdown with clear sections and formatting."""
         self.stop_button.setEnabled(True)
         
         logger.info(f"Button states: start={self.start_button.isEnabled()}, pause={self.pause_button.isEnabled()}, stop={self.stop_button.isEnabled()}")
+        logger.info(f"Session using label profile: {getattr(self, '_selected_profile_name', 'Default')}")
         
         self.session_active = True
         self.session_start_time = datetime.now()

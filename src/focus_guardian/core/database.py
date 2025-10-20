@@ -89,10 +89,11 @@ class Database:
                 INSERT INTO sessions (
                     session_id, started_at, ended_at, task_name,
                     quality_profile, screen_enabled, status,
+                    label_profile_name,
                     cam_mp4_path, screen_mp4_path, snapshots_dir,
                     vision_dir, logs_dir,
                     total_snapshots, uploaded_snapshots, failed_snapshots, total_events
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 session.session_id,
                 session.started_at.isoformat(),
@@ -101,6 +102,7 @@ class Database:
                 session.quality_profile.value,
                 1 if session.screen_enabled else 0,
                 session.status.value,
+                session.label_profile_name,
                 session.cam_mp4_path,
                 session.screen_mp4_path,
                 session.snapshots_dir,
@@ -146,6 +148,7 @@ class Database:
             quality_profile=QualityProfile(row['quality_profile']),
             screen_enabled=bool(row['screen_enabled']),
             status=SessionStatus(row['status']),
+            label_profile_name=row.get('label_profile_name', 'Default'),  # Backwards compatible
             cam_mp4_path=row['cam_mp4_path'],
             screen_mp4_path=row['screen_mp4_path'],
             snapshots_dir=row['snapshots_dir'],
@@ -184,6 +187,7 @@ class Database:
                 quality_profile=QualityProfile(row['quality_profile']),
                 screen_enabled=bool(row['screen_enabled']),
                 status=SessionStatus(row['status']),
+                label_profile_name=row.get('label_profile_name', 'Default'),  # Backwards compatible
                 cam_mp4_path=row['cam_mp4_path'],
                 screen_mp4_path=row['screen_mp4_path'],
                 snapshots_dir=row['snapshots_dir'],

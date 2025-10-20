@@ -77,7 +77,8 @@ class SessionManager:
         self,
         task_name: str,
         quality_profile: Optional[QualityProfile] = None,
-        screen_enabled: bool = True
+        screen_enabled: bool = True,
+        label_profile_name: Optional[str] = None
     ) -> str:
         """
         Start a new focus session.
@@ -86,6 +87,7 @@ class SessionManager:
             task_name: Name/description of the task
             quality_profile: Video quality (Low/Std/High)
             screen_enabled: Whether to capture screen
+            label_profile_name: Label profile to use (defaults to active profile from config)
             
         Returns:
             session_id
@@ -102,6 +104,26 @@ class SessionManager:
         # Use default quality profile if not specified
         if quality_profile is None:
             quality_profile = self.config.get_video_res_profile()
+        
+        # Use active label profile if not specified
+        if label_profile_name is None:
+            label_profile_name = self.config.get_active_profile_name()
+        
+        # Load label profile
+        try:
+            profile_manager = self.config.get_label_profiles_manager()
+            label_profile = profile_manager.get_profile(label_profile_name)
+            
+            if not label_profile:
+                logger.warning(f"Profile '{label_profile_name}' not found, using Default")
+                label_profile_name = "Default"
+                label_profile = profile_manager.get_profile("Default")
+            
+            logger.info(f"Using label profile: {label_profile_name}")
+        except Exception as e:
+            logger.error(f"Failed to load label profile: {e}, using hardcoded labels")
+            label_profile = None
+            label_profile_name = "Default"
         
         # Create session directory structure
         sessions_dir = self.config.get_sessions_dir()
@@ -122,6 +144,7 @@ class SessionManager:
             quality_profile=quality_profile,
             screen_enabled=screen_enabled,
             status=SessionStatus.ACTIVE,
+            label_profile_name=label_profile_name,
             cam_mp4_path=str(session_dir / "cam.mp4"),
             screen_mp4_path=str(session_dir / "screen.mp4") if screen_enabled else None,
             snapshots_dir=str(snapshots_dir),
@@ -133,8 +156,14 @@ class SessionManager:
         self.database.create_session(self.current_session)
         logger.info(f"Session record created: {session_id}")
         
-        # Initialize components
-        self._initialize_components(session_dir, snapshots_dir, quality_profile, screen_enabled)
+        # Initialize components with label profile
+        self._initialize_components(
+            session_dir,
+            snapshots_dir,
+            quality_profile,
+            screen_enabled,
+            label_profile
+        )
         
         # Start all components
         self._start_components()
@@ -147,9 +176,19 @@ class SessionManager:
         session_dir: Path,
         snapshots_dir: Path,
         quality_profile: QualityProfile,
-        screen_enabled: bool
+        screen_enabled: bool,
+        label_profile=None
     ) -> None:
-        """Initialize all session components."""
+        """
+        Initialize all session components.
+        
+        Args:
+            session_dir: Session directory
+            snapshots_dir: Snapshots directory
+            quality_profile: Video quality profile
+            screen_enabled: Whether screen recording is enabled
+            label_profile: Label profile for this session (optional)
+        """
         logger.info("Initializing session components...")
         
         # Queue manager for inter-thread communication
@@ -169,7 +208,8 @@ class SessionManager:
             api_key=openai_key,
             model=vision_model,
             detail=vision_detail,
-            config=self.config  # Pass config for custom prompts
+            config=self.config,  # Pass config for custom prompts
+            label_profile=label_profile  # Pass label profile for dynamic labels
         )
         
         # Get camera config (used by both recorder and scheduler)
@@ -216,7 +256,8 @@ class SessionManager:
         min_span_minutes = self.config.get_min_span_minutes()
         self.state_machine = StateMachine(
             K=K_hysteresis,
-            min_span_minutes=min_span_minutes
+            min_span_minutes=min_span_minutes,
+            label_profile=label_profile  # Pass label profile for dynamic voting
         )
         
         # Fusion engine

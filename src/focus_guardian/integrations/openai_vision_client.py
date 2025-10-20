@@ -57,7 +57,8 @@ class OpenAIVisionClient:
         timeout_sec: int = 30,
         model: str = "gpt-4.1-nano",
         detail: str = "high",
-        config=None
+        config=None,
+        label_profile=None  # Optional LabelProfile instance
     ):
         """
         Initialize OpenAI Vision client.
@@ -80,19 +81,26 @@ class OpenAIVisionClient:
                    gpt-4.1-nano: Efficient token usage (~2400 tokens/image with high detail)
                    High detail recommended for better accuracy with 120s intervals.
             config: Optional Config instance for custom prompts
+            label_profile: Optional LabelProfile for custom labels
         """
         self.api_key = api_key
         self.timeout_sec = timeout_sec
         self.model = model
         self.detail = detail
         self.config = config  # Store config for custom prompts
+        self.label_profile = label_profile  # Store profile for dynamic prompts/validation
 
         # Initialize OpenAI client
         self.client = OpenAI(api_key=api_key, timeout=timeout_sec)
 
-        logger.info(
-            f"OpenAI Vision client initialized (model: {model}, detail: {detail})"
-        )
+        if label_profile:
+            logger.info(
+                f"OpenAI Vision client initialized (model: {model}, detail: {detail}, profile: {label_profile.name})"
+            )
+        else:
+            logger.info(
+                f"OpenAI Vision client initialized (model: {model}, detail: {detail}, profile: hardcoded)"
+            )
     
     def classify_cam_snapshot(self, image_path: Path) -> VisionResult:
         """
@@ -141,7 +149,11 @@ class OpenAIVisionClient:
             if custom:
                 return custom
         
-        # Default prompt
+        # Generate prompt dynamically from label profile
+        if self.label_profile:
+            return self._generate_dynamic_cam_prompt(self.label_profile)
+        
+        # Fallback: Default hardcoded prompt
         return """Analyze this webcam image and classify the user's attention state.
 
 Possible classifications (return ONLY the most dominant ones with confidence 0.0-1.0):
@@ -171,6 +183,51 @@ Return as JSON:
   "reasoning": "brief explanation"
 }"""
     
+    def _generate_dynamic_cam_prompt(self, profile) -> str:
+        """Generate camera prompt dynamically from label profile."""
+        prompt = "Analyze this webcam image and classify the user's attention state.\n\n"
+        prompt += "Possible classifications (return ONLY the most dominant ones with confidence 0.0-1.0):\n\n"
+        
+        # Group labels by category
+        distraction_labels = profile.get_cam_labels_by_category("distraction")
+        focus_labels = profile.get_cam_labels_by_category("focus")
+        absence_labels = profile.get_cam_labels_by_category("absence")
+        
+        if distraction_labels:
+            prompt += "**Distraction Indicators:**\n"
+            for label_name in sorted(distraction_labels):
+                label_def = profile.cam_labels[label_name]
+                prompt += f"- {label_name}: {label_def.description}\n"
+            prompt += "\n"
+        
+        if absence_labels:
+            prompt += "**Absence Indicators:**\n"
+            for label_name in sorted(absence_labels):
+                label_def = profile.cam_labels[label_name]
+                prompt += f"- {label_name}: {label_def.description}\n"
+            prompt += "\n"
+        
+        if focus_labels:
+            prompt += "**Focus Indicators:**\n"
+            for label_name in sorted(focus_labels):
+                label_def = profile.cam_labels[label_name]
+                prompt += f"- {label_name}: {label_def.description}\n"
+            prompt += "\n"
+        
+        prompt += """**Instructions:**
+1. Look carefully at head orientation, eye gaze, and body language
+2. Return ONLY labels that are clearly present with high confidence
+3. Multiple labels can apply if multiple conditions are met
+4. Be precise and consistent in your classifications
+
+Return as JSON:
+{
+  "labels": {"LabelName": confidence, ...},
+  "reasoning": "brief explanation"
+}"""
+        
+        return prompt
+    
     def _build_screen_prompt(self) -> str:
         """Build prompt for screen snapshot classification."""
         # Check for custom prompt first
@@ -179,7 +236,11 @@ Return as JSON:
             if custom:
                 return custom
         
-        # Default prompt
+        # Generate prompt dynamically from label profile
+        if self.label_profile:
+            return self._generate_dynamic_screen_prompt(self.label_profile)
+        
+        # Fallback: Default hardcoded prompt
         return """Analyze this screen capture and classify the visible content/applications.
 
 Possible classifications (return ONLY clearly visible ones with confidence 0.0-1.0):
@@ -233,6 +294,59 @@ Return as JSON:
   "labels": {"LabelName": confidence, ...},
   "reasoning": "detailed explanation of what you see and why you classified it this way"
 }"""
+    
+    def _generate_dynamic_screen_prompt(self, profile) -> str:
+        """Generate screen prompt dynamically from label profile."""
+        prompt = "Analyze this screen capture and classify the visible content/applications.\n\n"
+        prompt += "Possible classifications (return ONLY clearly visible ones with confidence 0.0-1.0):\n\n"
+        
+        # Group labels by category
+        distraction_labels = profile.get_screen_labels_by_category("distraction")
+        focus_labels = profile.get_screen_labels_by_category("focus")
+        borderline_labels = profile.get_screen_labels_by_category("borderline")
+        neutral_labels = profile.get_screen_labels_by_category("neutral")
+        
+        if distraction_labels:
+            prompt += "**DISTRACTION Content:**\n"
+            for label_name in sorted(distraction_labels):
+                label_def = profile.screen_labels[label_name]
+                prompt += f"- {label_name}: {label_def.description}\n"
+            prompt += "\n"
+        
+        if focus_labels:
+            prompt += "**FOCUS Content:**\n"
+            for label_name in sorted(focus_labels):
+                label_def = profile.screen_labels[label_name]
+                prompt += f"- {label_name}: {label_def.description}\n"
+            prompt += "\n"
+        
+        if borderline_labels:
+            prompt += "**Borderline Content:**\n"
+            for label_name in sorted(borderline_labels):
+                label_def = profile.screen_labels[label_name]
+                prompt += f"- {label_name}: {label_def.description}\n"
+            prompt += "\n"
+        
+        if neutral_labels:
+            prompt += "**Neutral:**\n"
+            for label_name in sorted(neutral_labels):
+                label_def = profile.screen_labels[label_name]
+                prompt += f"- {label_name}: {label_def.description}\n"
+            prompt += "\n"
+        
+        prompt += """**Instructions:**
+1. Look at visible windows, applications, and content
+2. Return ONLY labels that are clearly present with high confidence
+3. Multiple labels can apply if multiple windows are visible
+4. Be precise in distinguishing work content from distracting content
+
+Return as JSON:
+{
+  "labels": {"LabelName": confidence, ...},
+  "reasoning": "detailed explanation"
+}"""
+        
+        return prompt
     
     def _classify_image(
         self,
@@ -333,14 +447,26 @@ Return as JSON:
             labels = result_data.get("labels", {})
             reasoning = result_data.get("reasoning", "")
             
-            # Validate labels against canonical taxonomy
-            valid_labels = CAM_LABELS if kind == "cam" else SCREEN_LABELS
+            # Validate labels against profile or hardcoded taxonomy
+            if self.label_profile:
+                # Use profile's labels and thresholds
+                if kind == "cam":
+                    valid_labels = self.label_profile.get_cam_label_names()
+                    thresholds = self.label_profile.get_cam_thresholds()
+                else:
+                    valid_labels = self.label_profile.get_screen_label_names()
+                    thresholds = self.label_profile.get_screen_thresholds()
+            else:
+                # Fallback to hardcoded labels
+                valid_labels = CAM_LABELS if kind == "cam" else SCREEN_LABELS
+                thresholds = CONFIDENCE_THRESHOLDS
+            
             filtered_labels = {}
             
             for label, confidence in labels.items():
                 if label in valid_labels:
                     # Apply confidence threshold
-                    threshold = CONFIDENCE_THRESHOLDS.get(label, 0.5)
+                    threshold = thresholds.get(label, 0.5)
                     if confidence >= threshold:
                         filtered_labels[label] = float(confidence)
                 else:
