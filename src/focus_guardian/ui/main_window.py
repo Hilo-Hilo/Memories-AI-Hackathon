@@ -2103,6 +2103,25 @@ class MainWindow(QMainWindow):
             session = self.database.get_session(session_id)
             task_name = session.task_name if session else "Unknown"
             
+            # Extract report text
+            report_text = report_data.get('report_text', '')
+            
+            # Debug logging
+            logger.info(f"Report data keys: {list(report_data.keys())}")
+            logger.info(f"Report text length: {len(report_text)} characters")
+            logger.info(f"Report text preview: {report_text[:200] if report_text else 'EMPTY!'}")
+            
+            # Check if report text is empty
+            if not report_text or len(report_text.strip()) == 0:
+                logger.error("Report text is empty!")
+                QMessageBox.warning(
+                    self,
+                    "Empty Report",
+                    f"The comprehensive report was generated but contains no text.\n\n"
+                    f"Report data: {json.dumps(report_data, indent=2)[:500]}"
+                )
+                return
+            
             # Create dialog
             dialog = QDialog(self)
             dialog.setWindowTitle(f"📊 Comprehensive AI Report - {task_name}")
@@ -2132,7 +2151,14 @@ Historical Trends, Snapshot Analysis</p>
             # Text display
             text_display = QTextEdit()
             text_display.setReadOnly(True)
-            text_display.setMarkdown(report_data.get('report_text', 'No report content'))
+            
+            # Try to set content as markdown, fallback to plain text
+            try:
+                text_display.setMarkdown(report_text)
+            except Exception as e:
+                logger.warning(f"Failed to set markdown, using plain text: {e}")
+                text_display.setPlainText(report_text)
+            
             text_display.setStyleSheet("""
                 QTextEdit {
                     font-size: 14px;
