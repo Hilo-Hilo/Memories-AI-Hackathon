@@ -55,7 +55,7 @@ class OpenAIVisionClient:
         self,
         api_key: str,
         timeout_sec: int = 30,
-        model: str = "gpt-5-nano",
+        model: str = "gpt-4o-mini",
         detail: str = "high"
     ):
         """
@@ -64,10 +64,11 @@ class OpenAIVisionClient:
         Args:
             api_key: OpenAI API key
             timeout_sec: Request timeout in seconds
-            model: Model to use (gpt-5-nano recommended for best cost efficiency)
-                   Options: gpt-5-nano ($0.055/image), gpt-4o-mini ($0.165/image)
+            model: Model to use (gpt-4o-mini recommended for reliability)
+                   Options: gpt-4o-mini ($0.165/image), gpt-4o ($0.50/image)
+                   Note: gpt-5-nano has issues with empty responses, not recommended
             detail: Image detail level - "low" (85 tokens) or "high" (1100 tokens)
-                   gpt-5-nano pricing: low=$0.00425/image, high=$0.055/image
+                   gpt-4o-mini pricing: low=$0.0025/image, high=$0.165/image
                    High detail recommended for better accuracy with 120s intervals.
         """
         self.api_key = api_key
