@@ -185,6 +185,14 @@ class MemoriesClient:
                             elif status == 'FAIL':
                                 logger.error("Video processing failed!")
                                 return False
+                            elif status == 'PENDING':
+                                logger.debug(f"Video still pending processing (waited {elapsed}s)")
+                            elif status == 'PROCESSING':
+                                logger.debug(f"Video being processed (waited {elapsed}s)")
+                            elif status == 'UPLOADING':
+                                logger.debug(f"Video being uploaded (waited {elapsed}s)")
+                            else:
+                                logger.debug(f"Unknown video status '{status}' (waited {elapsed}s)")
 
                 time.sleep(poll_interval)
                 elapsed += poll_interval

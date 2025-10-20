@@ -1,20 +1,25 @@
 """
 Configuration management for Focus Guardian.
 
-Implements a hierarchical configuration system:
+Implements a hierarchical configuration system with validation and self-healing:
 1. config/default_config.json (version-controlled defaults)
 2. data/config.encrypted.json (user overrides + encrypted API keys)
 3. .env or config.yaml (developer settings)
 4. Environment variables (highest priority)
 
 Priority: ENV VARS > config.yaml > config.encrypted.json > default_config.json
+
+Includes configuration validation, self-healing for corrupted configs, and runtime
+validation to ensure the application remains stable even with invalid settings.
 """
 
 import os
 import json
 import yaml
+import shutil
 from pathlib import Path
 from typing import Optional, Dict, Any
+from datetime import datetime
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 
@@ -64,7 +69,154 @@ class Config:
         self._encryption_key = self._get_or_create_encryption_key()
         
         logger.info(f"Configuration loaded from {self.root_dir}")
-    
+
+        # Validate and heal configuration after loading
+        self._validate_and_heal_config()
+
+    def _validate_and_heal_config(self) -> None:
+        """Validate configuration integrity and repair corrupted files."""
+        issues_found = []
+
+        # Validate default config
+        if not self._validate_config_structure(self._default_config):
+            logger.warning("Default config has structural issues, regenerating...")
+            issues_found.append("default_config")
+
+        # Validate user config
+        if not self._validate_config_structure(self._user_config):
+            logger.warning("User config has structural issues, resetting to defaults...")
+            issues_found.append("user_config")
+
+        # Validate developer config
+        if not self._validate_config_structure(self._developer_config):
+            logger.warning("Developer config has structural issues, resetting...")
+            issues_found.append("developer_config")
+
+        # Attempt to heal corrupted configs
+        if issues_found:
+            self._heal_corrupted_configs(issues_found)
+
+        # Validate final merged configuration
+        try:
+            # Test configuration system by accessing a known value
+            test_value = self._get_config_value("snapshot_interval_sec", None)
+            if test_value is None:
+                logger.error("Configuration system validation failed")
+                self._emergency_config_reset()
+        except Exception as e:
+            logger.error(f"Configuration system validation error: {e}")
+            self._emergency_config_reset()
+
+    def _validate_config_structure(self, config: Dict[str, Any]) -> bool:
+        """Validate that a configuration dictionary has expected structure."""
+        if not isinstance(config, dict):
+            return False
+
+        # Check for required keys and validate their types/values
+        required_validations = {
+            "snapshot_interval_sec": lambda x: isinstance(x, int) and 10 <= x <= 300,
+            "video_bitrate_kbps_cam": lambda x: isinstance(x, int) and 100 <= x <= 5000,
+            "video_bitrate_kbps_screen": lambda x: isinstance(x, int) and 100 <= x <= 10000,
+            "video_res_profile": lambda x: x in ["Low", "Std", "High"],
+            "max_parallel_uploads": lambda x: isinstance(x, int) and 1 <= x <= 10,
+            "openai_vision_enabled": lambda x: isinstance(x, bool),
+            "K_hysteresis": lambda x: isinstance(x, int) and 1 <= x <= 10,
+            "min_span_minutes": lambda x: isinstance(x, (int, float)) and 0.1 <= x <= 10.0,
+            "alert_sound_enabled": lambda x: isinstance(x, bool),
+            "data_retention_days": lambda x: isinstance(x, int) and 1 <= x <= 365,
+            "cloud_features_enabled": lambda x: isinstance(x, bool),
+            "hume_ai_enabled": lambda x: isinstance(x, bool),
+            "memories_ai_enabled": lambda x: isinstance(x, bool),
+            "hume_ai_auto_upload": lambda x: isinstance(x, bool),
+            "memories_ai_auto_upload": lambda x: isinstance(x, bool),
+        }
+
+        for key, validator in required_validations.items():
+            if key in config:
+                try:
+                    if not validator(config[key]):
+                        logger.warning(f"Invalid value for {key}: {config[key]}")
+                        return False
+                except Exception as e:
+                    logger.warning(f"Error validating {key}: {e}")
+                    return False
+
+        return True
+
+    def _heal_corrupted_configs(self, corrupted_files: list) -> None:
+        """Heal corrupted configuration files by regenerating them."""
+        if "default_config" in corrupted_files:
+            # Regenerate default config
+            default_config_path = self.config_dir / "default_config.json"
+            try:
+                default_config_path.unlink(missing_ok=True)  # Delete corrupted file
+                self._default_config = self._load_default_config()  # Reload with defaults
+                logger.info("Default config healed successfully")
+            except Exception as e:
+                logger.error(f"Failed to heal default config: {e}")
+
+        if "user_config" in corrupted_files:
+            # Reset user config to empty (will use defaults)
+            user_config_path = self.data_dir / "config.encrypted.json"
+            try:
+                user_config_path.unlink(missing_ok=True)
+                self._user_config = {}
+                logger.info("User config healed successfully")
+            except Exception as e:
+                logger.error(f"Failed to heal user config: {e}")
+
+        if "developer_config" in corrupted_files:
+            # Reset developer config
+            dev_config_path = self.root_dir / "config.yaml"
+            try:
+                dev_config_path.unlink(missing_ok=True)
+                self._developer_config = {}
+                logger.info("Developer config healed successfully")
+            except Exception as e:
+                logger.error(f"Failed to heal developer config: {e}")
+
+    def _emergency_config_reset(self) -> None:
+        """Emergency reset of all configuration if system is completely broken."""
+        logger.critical("Configuration system emergency reset triggered")
+
+        try:
+            # Backup current configs before reset
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Reset all config files
+            default_config_path = self.config_dir / "default_config.json"
+            user_config_path = self.data_dir / "config.encrypted.json"
+            dev_config_path = self.root_dir / "config.yaml"
+
+            # Backup if they exist
+            if default_config_path.exists():
+                backup_path = self.data_dir / f"default_config.backup.{timestamp}.json"
+                shutil.copy2(default_config_path, backup_path)
+
+            if user_config_path.exists():
+                backup_path = self.data_dir / f"config.encrypted.backup.{timestamp}.json"
+                shutil.copy2(user_config_path, backup_path)
+
+            if dev_config_path.exists():
+                backup_path = self.data_dir / f"config.yaml.backup.{timestamp}"
+                shutil.copy2(dev_config_path, backup_path)
+
+            # Reset files
+            default_config_path.unlink(missing_ok=True)
+            user_config_path.unlink(missing_ok=True)
+            dev_config_path.unlink(missing_ok=True)
+
+            # Reload with fresh defaults
+            self._default_config = self._load_default_config()
+            self._user_config = {}
+            self._developer_config = {}
+
+            logger.info("Configuration emergency reset completed")
+
+        except Exception as e:
+            logger.critical(f"Emergency config reset failed: {e}")
+            # If even emergency reset fails, we have bigger problems
+
     def _load_default_config(self) -> Dict[str, Any]:
         """Load default configuration from config/default_config.json."""
         default_config_path = self.config_dir / "default_config.json"
@@ -470,17 +622,168 @@ class Config:
     def save_developer_settings(self, settings: Dict[str, Any]) -> None:
         """
         Save developer settings to config.yaml.
-        
+
         Args:
             settings: Dictionary of settings to save
         """
+        # Validate settings before saving
+        if not self._validate_config_structure(settings):
+            logger.error("Cannot save invalid developer settings")
+            return
+
         # Merge with existing developer config
         self._developer_config.update(settings)
-        
+
         # Save to file
         dev_config_path = self.root_dir / "config.yaml"
-        with open(dev_config_path, 'w') as f:
-            yaml.dump(self._developer_config, f, default_flow_style=False)
-        
-        logger.info(f"Saved developer settings to {dev_config_path}")
+        try:
+            with open(dev_config_path, 'w') as f:
+                yaml.dump(self._developer_config, f, default_flow_style=False)
+            logger.info(f"Saved developer settings to {dev_config_path}")
+        except Exception as e:
+            logger.error(f"Failed to save developer settings: {e}")
+
+    def get_config_health_status(self) -> Dict[str, Any]:
+        """
+        Get configuration health status and diagnostics.
+
+        Returns:
+            Dictionary with health information
+        """
+        return {
+            "config_files": {
+                "default_config": self._check_config_file_health(self.config_dir / "default_config.json"),
+                "user_config": self._check_config_file_health(self.data_dir / "config.encrypted.json"),
+                "developer_config": self._check_config_file_health(self.root_dir / "config.yaml")
+            },
+            "encryption_key": self._check_encryption_key_health(),
+            "validation_status": {
+                "default_config_valid": self._validate_config_structure(self._default_config),
+                "user_config_valid": self._validate_config_structure(self._user_config),
+                "developer_config_valid": self._validate_config_structure(self._developer_config),
+                "merged_config_valid": self._validate_merged_config()
+            },
+            "file_sizes": {
+                "default_config": self._get_config_file_size(self.config_dir / "default_config.json"),
+                "user_config": self._get_config_file_size(self.data_dir / "config.encrypted.json"),
+                "developer_config": self._get_config_file_size(self.root_dir / "config.yaml")
+            }
+        }
+
+    def _check_config_file_health(self, file_path: Path) -> Dict[str, Any]:
+        """Check health of a specific config file."""
+        if not file_path.exists():
+            return {"exists": False, "corrupted": False, "size": 0}
+
+        try:
+            # Try to read and parse the file
+            if file_path.suffix == ".json":
+                with open(file_path, 'r') as f:
+                    json.load(f)
+            elif file_path.suffix in [".yaml", ".yml"]:
+                with open(file_path, 'r') as f:
+                    yaml.safe_load(f)
+
+            # Check file size (reasonable limits)
+            size = file_path.stat().st_size
+            if size > 1024 * 1024:  # 1MB limit
+                return {"exists": True, "corrupted": True, "size": size, "issue": "file_too_large"}
+
+            return {"exists": True, "corrupted": False, "size": size}
+
+        except (json.JSONDecodeError, yaml.YAMLError) as e:
+            return {"exists": True, "corrupted": True, "size": file_path.stat().st_size, "issue": str(e)}
+        except Exception as e:
+            return {"exists": True, "corrupted": True, "size": 0, "issue": f"read_error: {e}"}
+
+    def _check_encryption_key_health(self) -> Dict[str, Any]:
+        """Check encryption key health."""
+        key_file = self.data_dir / ".encryption_key"
+
+        if not key_file.exists():
+            return {"exists": False, "valid": False}
+
+        try:
+            with open(key_file, 'rb') as f:
+                key_data = f.read()
+
+            if len(key_data) != 44:  # Fernet keys are 44 bytes
+                return {"exists": True, "valid": False, "issue": "invalid_key_length"}
+
+            # Try to create Fernet object
+            Fernet(key_data)
+            return {"exists": True, "valid": True}
+
+        except Exception as e:
+            return {"exists": True, "valid": False, "issue": str(e)}
+
+    def _validate_merged_config(self) -> bool:
+        """Validate the final merged configuration."""
+        try:
+            # Test some critical values
+            interval = self.get_snapshot_interval_sec()
+            bitrate_cam = self.get_video_bitrate_kbps_cam()
+            bitrate_screen = self.get_video_bitrate_kbps_screen()
+            max_uploads = self.get_max_parallel_uploads()
+
+            return all([
+                10 <= interval <= 300,
+                100 <= bitrate_cam <= 5000,
+                100 <= bitrate_screen <= 10000,
+                1 <= max_uploads <= 10
+            ])
+        except Exception:
+            return False
+
+    def _get_config_file_size(self, file_path: Path) -> int:
+        """Get size of config file in bytes."""
+        try:
+            return file_path.stat().st_size if file_path.exists() else 0
+        except Exception:
+            return 0
+
+    def repair_config_file(self, file_type: str) -> bool:
+        """
+        Manually repair a specific config file.
+
+        Args:
+            file_type: "default", "user", or "developer"
+
+        Returns:
+            True if repair was successful
+        """
+        if file_type == "default":
+            try:
+                config_path = self.config_dir / "default_config.json"
+                config_path.unlink(missing_ok=True)
+                self._default_config = self._load_default_config()
+                logger.info("Default config repaired successfully")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to repair default config: {e}")
+                return False
+
+        elif file_type == "user":
+            try:
+                config_path = self.data_dir / "config.encrypted.json"
+                config_path.unlink(missing_ok=True)
+                self._user_config = {}
+                logger.info("User config repaired successfully")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to repair user config: {e}")
+                return False
+
+        elif file_type == "developer":
+            try:
+                config_path = self.root_dir / "config.yaml"
+                config_path.unlink(missing_ok=True)
+                self._developer_config = {}
+                logger.info("Developer config repaired successfully")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to repair developer config: {e}")
+                return False
+
+        return False
 

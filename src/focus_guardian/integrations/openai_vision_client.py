@@ -22,6 +22,9 @@ from ..core.models import (
     CONFIDENCE_THRESHOLDS
 )
 from ..utils.logger import get_logger
+from ..utils.error_handler import (
+    handle_error, with_circuit_breaker, ErrorSeverity, ErrorCategory
+)
 
 logger = get_logger(__name__)
 
@@ -189,6 +192,15 @@ Return as JSON:
   "reasoning": "brief explanation of what you see"
 }"""
     
+    @with_circuit_breaker('openai_vision', failure_threshold=3, recovery_timeout=30.0)
+    @handle_error(
+        component='openai_vision_client',
+        operation='classify_image',
+        severity=ErrorSeverity.HIGH,
+        category=ErrorCategory.API,
+        user_visible=True,
+        can_retry=True
+    )
     def _classify_image(
         self,
         image_path: Path,
@@ -197,25 +209,36 @@ Return as JSON:
     ) -> VisionResult:
         """
         Classify image using OpenAI Vision API.
-        
+
         Args:
             image_path: Path to image file
             prompt: Classification prompt
             kind: "cam" or "screen" for logging
-            
+
         Returns:
             VisionResult
         """
         start_time = time.time()
-        
+
+        # Validate image file exists and is readable
+        if not image_path.exists():
+            raise VisionAPIError(f"Image file not found: {image_path}")
+
+        if image_path.stat().st_size == 0:
+            raise VisionAPIError(f"Image file is empty: {image_path}")
+
         try:
             # Read and encode image
             with open(image_path, 'rb') as f:
                 image_data = f.read()
-            
+
             base64_image = base64.b64encode(image_data).decode('utf-8')
-            
-            # Call OpenAI Vision API
+
+            # Validate base64 encoding
+            if not base64_image:
+                raise VisionAPIError("Failed to encode image to base64")
+
+            # Call OpenAI Vision API with enhanced error handling
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -234,9 +257,14 @@ Return as JSON:
                     }
                 ],
                 max_completion_tokens=300,  # Changed from max_tokens for newer models (gpt-5-nano, gpt-4o-mini)
-                temperature=0.1  # Low temperature for consistent classifications
+                temperature=0.1,  # Low temperature for consistent classifications
+                timeout=self.timeout_sec
             )
-            
+
+            # Validate response structure
+            if not response or not response.choices:
+                raise VisionAPIError("Invalid response from OpenAI Vision API")
+
             latency_ms = (time.time() - start_time) * 1000
             
             # Parse response
@@ -289,12 +317,28 @@ Return as JSON:
             )
         
         except openai.RateLimitError as e:
-            logger.error(f"OpenAI Vision API rate limit hit: {e}")
+            logger.warning(f"OpenAI Vision API rate limit hit: {e}")
             raise RateLimitError(str(e)) from e
-        
+
+        except openai.APIError as e:
+            # Handle specific OpenAI API errors
+            if "insufficient_quota" in str(e).lower():
+                logger.error(f"OpenAI API quota exceeded: {e}")
+                raise VisionAPIError("OpenAI API quota exceeded. Please check your billing.") from e
+            elif "invalid_api_key" in str(e).lower():
+                logger.error(f"OpenAI API key invalid: {e}")
+                raise VisionAPIError("OpenAI API key is invalid. Please check your configuration.") from e
+            else:
+                logger.error(f"OpenAI Vision API error: {e}", exc_info=True)
+                raise VisionAPIError(str(e)) from e
+
+        except (ConnectionError, TimeoutError) as e:
+            logger.error(f"Network error calling OpenAI Vision API: {e}")
+            raise
+
         except Exception as e:
-            logger.error(f"OpenAI Vision API error: {e}", exc_info=True)
-            raise VisionAPIError(str(e)) from e
+            logger.error(f"Unexpected error in OpenAI Vision API call: {e}", exc_info=True)
+            raise VisionAPIError(f"Unexpected error: {str(e)}") from e
     
     def batch_classify(
         self,

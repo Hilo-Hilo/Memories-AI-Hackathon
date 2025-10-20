@@ -68,6 +68,9 @@ class MainWindow(QMainWindow):
         self._setup_status_bar()
         self._setup_system_tray()
         self._setup_timers()
+
+        # Set minimum window size to prevent layout issues
+        self.setMinimumSize(1000, 700)
         
         # Connect signals
         self.distraction_alert.connect(self._handle_distraction_alert)
@@ -298,11 +301,22 @@ class MainWindow(QMainWindow):
     
     def _create_settings_tab(self) -> QWidget:
         """Create settings tab for configuration."""
-        from PyQt6.QtWidgets import QComboBox, QGroupBox, QFormLayout
+        from PyQt6.QtWidgets import QComboBox, QGroupBox, QFormLayout, QScrollArea, QFrame
         from ..capture.screen_capture import WebcamCapture
 
+        # Create main widget
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+
+        # Create scroll area for the entire settings content
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        # Create scrollable content widget
+        scroll_widget = QWidget()
+        layout = QVBoxLayout(scroll_widget)
         layout.setSpacing(20)
 
         label = QLabel("Settings")
@@ -583,6 +597,14 @@ class MainWindow(QMainWindow):
         layout.addWidget(cloud_group)
 
         layout.addStretch()
+
+        # Set the scroll widget as the scroll area's widget
+        scroll_area.setWidget(scroll_widget)
+
+        # Create main layout for the tab widget
+        main_layout = QVBoxLayout(widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll_area)
 
         return widget
 
@@ -1270,17 +1292,26 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
 
         # Summary header
-        summary_text = f"**Storage Summary (queried from APIs):**\n\n"
+        summary_text = f"Storage Summary (queried from APIs):\n\n"
         summary_text += f"• Hume AI: {summary['hume_ai']['count']} jobs\n"
         summary_text += f"• Memories.ai: {summary['memories_ai']['count']} videos\n"
         summary_text += f"• Total: {total_count} items\n\n"
-        summary_text += "*Note: Hume AI jobs auto-expire after 30 days (no delete API)*"
+        summary_text += "Note: Hume AI jobs auto-expire after 30 days (no delete API)"
 
         if summary.get("error"):
-            summary_text += f"\n\n**Warning:** {summary['error']}"
+            summary_text += f"\n\nWarning: {summary['error']}"
 
         summary_label = QLabel(summary_text)
-        summary_label.setStyleSheet("font-size: 13px; padding: 10px; background-color: #ecf0f1; border-radius: 4px;")
+        summary_label.setStyleSheet("""
+            QLabel {
+                font-size: 13px;
+                color: #2c3e50;
+                background-color: #ffffff;
+                padding: 15px;
+                border: 1px solid #bdc3c7;
+                border-radius: 6px;
+            }
+        """)
         summary_label.setWordWrap(True)
         layout.addWidget(summary_label)
 
@@ -1751,8 +1782,9 @@ class MainWindow(QMainWindow):
                     if session_id in self.active_uploads:
                         del self.active_uploads[session_id]
 
-                    # Close progress dialog
+                    # Close progress dialog and ensure it's destroyed
                     progress_dialog.close()
+                    progress_dialog.deleteLater()  # Force garbage collection
 
                     # Update status bar
                     self.status_bar.showMessage("✓ Upload completed - processing started", 10000)  # Show for 10 seconds
@@ -1791,8 +1823,9 @@ class MainWindow(QMainWindow):
                     if session_id in self.active_uploads:
                         del self.active_uploads[session_id]
 
-                    # Close progress dialog
+                    # Close progress dialog and ensure it's destroyed
                     progress_dialog.close()
+                    progress_dialog.deleteLater()  # Force garbage collection
 
                     # Update status bar
                     self.status_bar.showMessage("✗ Upload failed", 10000)
@@ -2452,7 +2485,8 @@ class MainWindow(QMainWindow):
                 status = self.session_manager.cloud_analysis_manager.check_job_status(job_id)
 
                 if status == CloudJobStatus.COMPLETED:
-                    # Retrieve results
+                    # Job completed - retrieve results
+                    logger.info(f"Job {job_id} completed, retrieving results...")
                     results_path = self.session_manager.cloud_analysis_manager.retrieve_and_store_results(job_id)
 
                     if results_path:
@@ -2467,6 +2501,25 @@ class MainWindow(QMainWindow):
                         })
                     else:
                         logger.error(f"Failed to retrieve results for job {job_id}")
+
+                elif status == CloudJobStatus.PROCESSING:
+                    # Job still processing - schedule another check in 30 seconds
+                    logger.info(f"Job {job_id} still processing, will check again in 30 seconds")
+
+                    def retry_check():
+                        if job_id in self.active_refresh_jobs:
+                            self._on_refresh_job(job_id)
+
+                    QTimer.singleShot(30000, retry_check)  # 30 second delay
+                    return  # Don't complete the refresh yet
+
+                elif status == CloudJobStatus.FAILED:
+                    # Job failed - log error but don't retry automatically
+                    logger.error(f"Job {job_id} failed permanently")
+
+                else:
+                    # Unknown status - log warning
+                    logger.warning(f"Job {job_id} has unknown status: {status}")
 
                 # CRITICAL: Schedule UI update on main thread (CANNOT modify Qt widgets from background thread!)
                 def on_refresh_complete():
@@ -2499,7 +2552,7 @@ class MainWindow(QMainWindow):
         Args:
             job_id: Cloud analysis job ID
         """
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QSizePolicy, QScrollArea, QFrame
         from pathlib import Path
         import json
         from ..core.models import CloudProvider
@@ -2551,9 +2604,17 @@ class MainWindow(QMainWindow):
             # Create dialog to display results
             dialog = QDialog(self)
             dialog.setWindowTitle(title)
-            dialog.setMinimumSize(700, 500)
+            dialog.setMinimumSize(800, 600)  # Increased size for better readability
+            dialog.resize(900, 700)  # Default size
 
             layout = QVBoxLayout(dialog)
+
+            # Create scroll area for the text content
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
             # Text display with results
             text_display = QTextEdit()
@@ -2567,9 +2628,13 @@ class MainWindow(QMainWindow):
                     border: 1px solid #bdc3c7;
                     border-radius: 4px;
                     padding: 10px;
+                    line-height: 1.4;
                 }
             """)
-            layout.addWidget(text_display)
+
+            # Set the text display as the scroll area's widget
+            scroll_area.setWidget(text_display)
+            layout.addWidget(scroll_area)
 
             # Close button
             button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -2861,6 +2926,20 @@ class MainWindow(QMainWindow):
                     text += f"  - Average: {mean:.2f}\n"
                     text += f"  - Peak: {max_val:.2f}\n\n"
 
+        # Section 5: Raw Data Summary
+        text += "## Raw Data Summary\n\n"
+        text += f"**Total Frames:** {frame_count}\n\n"
+        text += f"**Timeline Length:** {len(timeline)} data points\n\n"
+        if emotion_percentages:
+            text += "**Emotion Distribution Summary:**\n\n"
+            for emotion, percentage in sorted(emotion_percentages.items(), key=lambda x: x[1], reverse=True):
+                text += f"- {emotion.title()}: {percentage:.1f}%\n"
+            text += "\n"
+
+        text += "---\n\n"
+        text += "*Report generated by Focus Guardian*\n"
+
+        logger.info(f"Hume AI report generated: {len(text)} characters")
         return text
 
     def _format_memories_results(self, results: dict) -> str:
@@ -2879,19 +2958,27 @@ class MainWindow(QMainWindow):
         """Handle window close event."""
         # Check for active uploads first
         if self.active_uploads:
-            num_uploads = len(self.active_uploads)
-            reply = QMessageBox.warning(
-                self,
-                "Uploads In Progress",
-                f"{num_uploads} cloud upload(s) in progress.\n\n"
-                "If you quit now, the uploads will be cancelled and you'll need to restart them.\n\n"
-                "Are you sure you want to quit?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
+            # Double-check that uploads are actually still active
+            # (they might have completed but not been cleared yet)
+            active_sessions = []
+            for session_id, job_ids in self.active_uploads.items():
+                if job_ids:  # Only count sessions that have active job IDs
+                    active_sessions.append(session_id)
 
-            if reply == QMessageBox.StandardButton.No:
-                event.ignore()
-                return
+            if active_sessions:
+                num_uploads = len(active_sessions)
+                reply = QMessageBox.warning(
+                    self,
+                    "Uploads In Progress",
+                    f"{num_uploads} cloud upload(s) in progress.\n\n"
+                    "If you quit now, the uploads will be cancelled and you'll need to restart them.\n\n"
+                    "Are you sure you want to quit?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+
+                if reply == QMessageBox.StandardButton.No:
+                    event.ignore()
+                    return
 
         # Check for active session
         if self.session_active:
