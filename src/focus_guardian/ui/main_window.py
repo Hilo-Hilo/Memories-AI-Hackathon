@@ -2011,6 +2011,12 @@ class MainWindow(QMainWindow):
                     
                     # Show subtle notification
                     self.status_bar.showMessage("✅ Comprehensive AI report generated! Click to view.", 10000)
+                    
+                    # Desktop notification
+                    self._show_desktop_notification(
+                        "AI Report Ready",
+                        "Comprehensive AI report generated! Click to view insights."
+                    )
                 
                 QTimer.singleShot(0, on_complete)
                 
@@ -2125,9 +2131,49 @@ Historical Trends, Snapshot Analysis</p>
             layout.addWidget(scroll_area)
             
             # Buttons
-            button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-            button_box.accepted.connect(dialog.accept)
-            layout.addWidget(button_box)
+            button_layout = QHBoxLayout()
+            
+            # Regenerate button
+            regen_btn = QPushButton("🔄 Regenerate This Report")
+            regen_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #e67e22;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-size: 13px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #d35400;
+                }
+            """)
+            regen_btn.setToolTip("Generate a new comprehensive report with latest data (old archived)")
+            regen_btn.clicked.connect(lambda: self._regenerate_and_close(dialog, session_id))
+            button_layout.addWidget(regen_btn)
+            
+            button_layout.addStretch()
+            
+            # Close button
+            close_btn = QPushButton("Close")
+            close_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #95a5a6;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-size: 13px;
+                }
+                QPushButton:hover {
+                    background-color: #7f8c8d;
+                }
+            """)
+            close_btn.clicked.connect(dialog.accept)
+            button_layout.addWidget(close_btn)
+            
+            layout.addLayout(button_layout)
             
             dialog.exec()
             
@@ -2138,6 +2184,22 @@ Historical Trends, Snapshot Analysis</p>
                 "Error",
                 f"Failed to load comprehensive AI report:\n\n{str(e)}"
             )
+    
+    def _regenerate_and_close(self, dialog, session_id: str):
+        """Regenerate comprehensive report and close dialog."""
+        dialog.accept()  # Close the view dialog
+        self._on_regenerate_comprehensive_only(session_id)  # Trigger regeneration
+    
+    def _show_desktop_notification(self, title: str, message: str):
+        """Show desktop notification using system tray."""
+        if self.tray_icon and self.tray_icon.isVisible():
+            self.tray_icon.showMessage(
+                title,
+                message,
+                QSystemTrayIcon.MessageIcon.Information,
+                5000  # Show for 5 seconds
+            )
+            logger.info(f"Desktop notification: {title} - {message}")
     
     def _on_regenerate_hume(self, session_id: str):
         """Regenerate Hume AI emotion analysis only."""
@@ -2182,6 +2244,12 @@ Historical Trends, Snapshot Analysis</p>
                     self.regenerating_hume.discard(session_id)
                     self._load_sessions_list()
                     self.status_bar.showMessage(f"✅ Hume AI regeneration started! Check status in ~5 minutes.", 10000)
+                    
+                    # Desktop notification
+                    self._show_desktop_notification(
+                        "Hume AI Regeneration Started",
+                        "Emotion analysis regeneration in progress. Check status in ~5 minutes."
+                    )
                 
                 QTimer.singleShot(0, done)
                 
@@ -2240,6 +2308,12 @@ Historical Trends, Snapshot Analysis</p>
                     self.regenerating_memories.discard(session_id)
                     self._load_sessions_list()
                     self.status_bar.showMessage(f"✅ Memories.ai regeneration started! Check status in ~5 minutes.", 10000)
+                    
+                    # Desktop notification
+                    self._show_desktop_notification(
+                        "Memories.ai Regeneration Started",
+                        "Pattern analysis regeneration in progress. Check status in ~5 minutes."
+                    )
                 
                 QTimer.singleShot(0, done)
                 
@@ -4179,28 +4253,6 @@ Historical Trends, Snapshot Analysis</p>
                 regen_memories_btn.setToolTip(tooltip)
                 regen_memories_btn.clicked.connect(lambda: self._on_regenerate_memories(session.session_id))
                 regen_layout.addWidget(regen_memories_btn)
-            
-            # Comprehensive report regenerate button (if report exists)
-            comprehensive_report_path = self.config.get_data_dir() / f"sessions/{session.session_id}/comprehensive_ai_report.json"
-            if comprehensive_report_path.exists():
-                regen_comprehensive_btn = QPushButton("🔄 Regen AI Report")
-                regen_comprehensive_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e67e22;
-                        color: white;
-                        border: none;
-                        border-radius: 4px;
-                        padding: 4px 8px;
-                        font-size: 11px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover {
-                        background-color: #d35400;
-                    }
-                """)
-                regen_comprehensive_btn.setToolTip("Regenerate comprehensive AI report using latest data (old archived)")
-                regen_comprehensive_btn.clicked.connect(lambda: self._on_regenerate_comprehensive_only(session.session_id))
-                regen_layout.addWidget(regen_comprehensive_btn)
             
             regen_layout.addStretch()
             layout.addLayout(regen_layout, row, 0, 1, 2)
