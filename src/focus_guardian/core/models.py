@@ -355,7 +355,8 @@ CAM_LABELS = {
 
 # Screen Labels
 SCREEN_LABELS = {
-    "VideoOnScreen",      # Video player or streaming content
+    "VideoOnScreen",      # Video player or streaming content (entertainment/distraction)
+    "WorkRelatedVideo",   # Tutorial/educational video with work context
     "SocialFeed",         # Social media feed scrolling
     "Code",               # Code editor or IDE
     "Docs",               # Documentation, technical reading, wikis
@@ -365,6 +366,8 @@ SCREEN_LABELS = {
     "Slides",             # Presentation software
     "Terminal",           # Command line terminal or shell
     "ChatWindow",         # Chat/messaging applications
+    "WorkChat",           # Work-related chat (Slack, Teams)
+    "Browser",            # Generic browser
     "Games",              # Gaming applications or entertainment
     "MultipleMonitors",   # Multiple windows visible (borderline - context switching)
     "Unknown"             # Cannot determine content type
@@ -376,8 +379,8 @@ CAM_FOCUS_LABELS = {"Focused"}
 CAM_ABSENCE_LABELS = {"Absent"}
 
 SCREEN_DISTRACTION_LABELS = {"VideoOnScreen", "SocialFeed", "Games", "ChatWindow"}
-SCREEN_FOCUS_LABELS = {"Code", "Docs", "Reading", "Slides", "Terminal"}
-SCREEN_BORDERLINE_LABELS = {"Email", "VideoCall", "MultipleMonitors"}  # Context-dependent
+SCREEN_FOCUS_LABELS = {"Code", "Docs", "Reading", "Slides", "Terminal", "WorkRelatedVideo", "WorkChat"}
+SCREEN_BORDERLINE_LABELS = {"Email", "VideoCall", "MultipleMonitors", "Browser"}  # Context-dependent
 SCREEN_NEUTRAL_LABELS = {"Unknown"}
 
 

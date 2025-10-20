@@ -1654,17 +1654,173 @@ class MainWindow(QMainWindow):
 
             summary += "</div>"
 
-            # Show dialog
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Session Complete")
-            msg_box.setText(summary)
-            msg_box.setIcon(QMessageBox.Icon.Information)
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msg_box.setTextFormat(Qt.TextFormat.RichText)
-            msg_box.exec()
+            # Save AI summary to session folder
+            if self.ai_summary_generator and ai_summaries:
+                self._save_ai_summary_to_session(session_id, ai_summaries, summary)
+
+            # Show resizable dialog instead of fixed-width QMessageBox
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QScrollArea, QFrame
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("✨ Session Complete - AI Summary")
+            dialog.setMinimumSize(800, 600)
+            dialog.resize(950, 750)  # Default comfortable size
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Create scroll area for content
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+            
+            # Text display
+            text_display = QTextEdit()
+            text_display.setReadOnly(True)
+            text_display.setHtml(summary)
+            text_display.setStyleSheet("""
+                QTextEdit {
+                    font-size: 13px;
+                    color: #2c3e50;
+                    background-color: white;
+                    border: none;
+                    padding: 15px;
+                    line-height: 1.6;
+                }
+            """)
+            
+            scroll_area.setWidget(text_display)
+            layout.addWidget(scroll_area)
+            
+            # Buttons
+            button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            button_box.accepted.connect(dialog.accept)
+            layout.addWidget(button_box)
+            
+            dialog.exec()
 
         except Exception as e:
             logger.error(f"Failed to show session summary: {e}", exc_info=True)
+    
+    def _save_ai_summary_to_session(self, session_id: str, ai_summaries: dict, full_html: str) -> None:
+        """Save AI-generated summaries to session folder."""
+        try:
+            import json
+            from pathlib import Path
+            
+            # Get session folder
+            session = self.database.get_session(session_id)
+            if not session:
+                return
+            
+            session_dir = self.config.get_data_dir() / f"sessions/{session_id}"
+            session_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save AI summaries as JSON
+            ai_summary_file = session_dir / "ai_summary.json"
+            with open(ai_summary_file, 'w') as f:
+                json.dump({
+                    "generated_at": datetime.now().isoformat(),
+                    "session_id": session_id,
+                    "task_name": session.task_name,
+                    "summaries": ai_summaries,
+                    "full_html": full_html
+                }, f, indent=2)
+            
+            logger.info(f"AI summary saved to {ai_summary_file}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save AI summary: {e}", exc_info=True)
+    
+    def _load_saved_ai_summary(self, session_id: str) -> Optional[dict]:
+        """Load saved AI summary from session folder."""
+        try:
+            import json
+            from pathlib import Path
+            
+            session_dir = self.config.get_data_dir() / f"sessions/{session_id}"
+            ai_summary_file = session_dir / "ai_summary.json"
+            
+            if not ai_summary_file.exists():
+                return None
+            
+            with open(ai_summary_file, 'r') as f:
+                return json.load(f)
+        
+        except Exception as e:
+            logger.error(f"Failed to load AI summary: {e}")
+            return None
+    
+    def _on_view_saved_summary(self, session_id: str):
+        """View saved AI summary for a session."""
+        try:
+            saved_summary = self._load_saved_ai_summary(session_id)
+            
+            if not saved_summary:
+                QMessageBox.warning(
+                    self,
+                    "Summary Not Available",
+                    "AI summary not found for this session.\n\n"
+                    "Summaries are generated when AI features are enabled."
+                )
+                return
+            
+            # Get session info
+            session = self.database.get_session(session_id)
+            task_name = session.task_name if session else "Unknown"
+            generated_at = saved_summary.get("generated_at", "Unknown")
+            full_html = saved_summary.get("full_html", "")
+            
+            # Create resizable dialog
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox, QScrollArea, QFrame, QLabel
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"✨ AI Summary - {task_name}")
+            dialog.setMinimumSize(800, 600)
+            dialog.resize(950, 750)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Header with metadata
+            header = QLabel(f"<p style='color: #7f8c8d; font-size: 11px;'>Generated: {generated_at}</p>")
+            layout.addWidget(header)
+            
+            # Scroll area for content
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+            
+            # Text display
+            text_display = QTextEdit()
+            text_display.setReadOnly(True)
+            text_display.setHtml(full_html)
+            text_display.setStyleSheet("""
+                QTextEdit {
+                    font-size: 13px;
+                    color: #2c3e50;
+                    background-color: white;
+                    border: none;
+                    padding: 15px;
+                    line-height: 1.6;
+                }
+            """)
+            
+            scroll_area.setWidget(text_display)
+            layout.addWidget(scroll_area)
+            
+            # Buttons
+            button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            button_box.accepted.connect(dialog.accept)
+            layout.addWidget(button_box)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Failed to show saved summary: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to load AI summary:\n\n{str(e)}"
+            )
     
     def _show_about(self):
         """Show about dialog."""
@@ -3504,6 +3660,27 @@ class MainWindow(QMainWindow):
         row += 1
         action_layout = QHBoxLayout()
 
+        # View AI Summary button (if available)
+        if self._load_saved_ai_summary(session.session_id):
+            view_summary_btn = QPushButton("✨ View AI Summary")
+            view_summary_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #9b59b6;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #8e44ad;
+                }
+            """)
+            view_summary_btn.setToolTip("View AI-generated session summary")
+            view_summary_btn.clicked.connect(lambda: self._on_view_saved_summary(session.session_id))
+            action_layout.addWidget(view_summary_btn)
+        
         # Show Files button
         show_files_btn = QPushButton("📁 Show Files")
         show_files_btn.setStyleSheet("""

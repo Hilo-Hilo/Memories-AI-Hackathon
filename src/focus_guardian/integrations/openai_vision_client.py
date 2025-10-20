@@ -167,38 +167,54 @@ Return as JSON:
 
 Possible classifications (return ONLY clearly visible ones with confidence 0.0-1.0):
 
-**Distraction Content:**
-- VideoOnScreen: Video player or streaming (YouTube, Netflix, etc.)
-- SocialFeed: Social media feed scrolling (Twitter, Instagram, Facebook, LinkedIn, TikTok)
+**HIGH-RISK DISTRACTION Content (Always flag these):**
+- VideoOnScreen: Video player showing entertainment/non-work content (YouTube, Netflix, TikTok, Twitch)
+  * Look for: play buttons, video timelines, thumbnails, entertainment titles
+  * Even if paused, flag if video content is visible
+  * Exception: Tutorial/educational videos WITH code/terminal visible = WorkRelatedVideo instead
+- SocialFeed: Social media feed scrolling (Twitter, Instagram, Facebook, Reddit, LinkedIn feed)
 - Games: Gaming applications or entertainment software
-- ChatWindow: Chat/messaging apps (Slack, Discord, WhatsApp, iMessage)
+- ChatWindow: Personal chat/messaging apps (Discord, WhatsApp, iMessage - NOT work Slack)
 
+**WORK-RELATED Video (Educational/Tutorial):**
+- WorkRelatedVideo: Tutorial, coding video, educational content WITH evidence of work context
+  * Must see: Code editor, terminal, or technical content alongside video
+  * Or: Video shows coding, technical tutorial, documentation walkthrough
+  
 **Focus Content:**
 - Code: Code editor or IDE (VS Code, PyCharm, Sublime, JetBrains, Vim)
-- Docs: Documentation, technical reading, wikis, API docs
-- Reading: Long-form reading (ebooks, PDFs, news articles, NOT code)
+- Docs: Documentation, technical reading, wikis, API docs, Stack Overflow
+- Reading: Long-form reading (ebooks, PDFs, research papers)
 - Slides: Presentation software (PowerPoint, Google Slides, Keynote)
 - Terminal: Command line terminal or shell
 
-**Borderline Content:**
+**Work Communication:**
 - Email: Email client (Gmail, Outlook, Apple Mail)
 - VideoCall: Video conferencing UI (Zoom, Meet, Teams, FaceTime)
+- WorkChat: Work messaging (Slack, Teams chat, work Discord server)
+
+**Borderline Content:**
 - MultipleMonitors: Multiple windows visible, potential context switching
+- Browser: Generic browser without clear content type
 
 **Neutral:**
 - Unknown: Cannot determine content type clearly
 
-**Instructions:**
-1. Look at window titles, icons, UI elements, visible content
-2. Return ONLY labels that are clearly identifiable (confidence ≥ 0.6)
-3. Multiple labels can apply if multiple windows visible
-4. If uncertain, use Unknown
-5. Prioritize the largest/most prominent window
+**CRITICAL Instructions for Video Detection:**
+1. If you see a video player (YouTube, etc.), check the CONTEXT:
+   - Is there code, terminal, or work tools visible? → WorkRelatedVideo (productive)
+   - Is it just entertainment content? → VideoOnScreen (distraction)
+   - Look at video title, thumbnails, related videos for clues
+2. Entertainment videos are ALWAYS flagged as VideoOnScreen (distraction)
+3. Tutorial/educational videos WITH work context → WorkRelatedVideo (not flagged)
+4. Social media is ALWAYS a distraction (even LinkedIn feed browsing)
+5. Return labels with confidence ≥ 0.6 only
+6. Multiple labels can apply if multiple windows visible
 
 Return as JSON:
 {
   "labels": {"LabelName": confidence, ...},
-  "reasoning": "brief explanation of what you see"
+  "reasoning": "detailed explanation of what you see and why you classified it this way"
 }"""
     
     def _classify_image(
