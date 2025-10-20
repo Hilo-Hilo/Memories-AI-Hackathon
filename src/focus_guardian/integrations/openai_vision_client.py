@@ -276,16 +276,30 @@ Return as JSON:
             # Parse response
             content = response.choices[0].message.content
             
+            # Validate content exists
+            if not content or content.strip() == "":
+                logger.error("Empty response from OpenAI Vision API")
+                raise VisionAPIError("Empty response from OpenAI Vision API")
+            
             # Extract JSON from response
             import json
             import re
             
+            # Log the actual response for debugging
+            logger.debug(f"Vision API response for {kind}: {content[:200]}...")
+            
             # Try to find JSON in response
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
             if json_match:
-                result_data = json.loads(json_match.group())
+                try:
+                    result_data = json.loads(json_match.group())
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON from Vision API response: {e}")
+                    logger.error(f"Content was: {content}")
+                    raise VisionAPIError(f"Invalid JSON in response: {e}")
             else:
-                logger.warning(f"Could not parse JSON from Vision API response: {content}")
+                logger.warning(f"Could not find JSON in Vision API response: {content}")
+                # Try to extract labels from plain text response
                 result_data = {"labels": {}, "reasoning": content}
             
             labels = result_data.get("labels", {})
