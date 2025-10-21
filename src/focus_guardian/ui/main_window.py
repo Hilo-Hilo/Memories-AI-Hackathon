@@ -70,6 +70,9 @@ class MainWindow(QMainWindow):
         self.session_paused_at = None
         self.session_total_paused_seconds = 0
 
+        # Camera initialization flag (prevent re-scanning on theme changes)
+        self._cameras_initialized = False
+
         # Cloud upload tracking
         self.active_uploads = {}  # Dict[session_id, List[job_id]]
         self.active_refresh_jobs = set()  # Set[job_id] - Track jobs being refreshed
@@ -1349,7 +1352,13 @@ class MainWindow(QMainWindow):
 
         # Auto-refresh camera list on startup to detect available cameras
         # This ensures we never use -1 (auto-detect) and always have real camera indices
-        QTimer.singleShot(500, self._refresh_camera_list_silent)
+        # Only do this ONCE on first creation, not on theme changes
+        if not self._cameras_initialized:
+            QTimer.singleShot(500, self._refresh_camera_list_silent)
+            self._cameras_initialized = True
+            logger.info("Camera auto-detect scheduled (first time only)")
+        else:
+            logger.info("Skipping camera auto-detect (already initialized)")
 
         return scroll_area
     
