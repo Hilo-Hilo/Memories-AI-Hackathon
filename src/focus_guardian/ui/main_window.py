@@ -128,40 +128,90 @@ class MainWindow(QMainWindow):
         logger.info("Main window initialized")
     
     def _get_colors(self):
-        """Get color palette based on current theme mode."""
+        """Get Apple-native color palette based on current theme mode."""
         if self.dark_mode:
             return {
-                'bg_primary': '#1C1C1E',
-                'bg_secondary': '#2C2C2E',
-                'bg_tertiary': '#3A3A3C',
-                'card_bg': '#2C2C2E',
-                'accent_blue': '#0A84FF',
-                'accent_green': '#30D158',
-                'accent_orange': '#FF9F0A',
-                'accent_red': '#FF453A',
-                'text_primary': '#FFFFFF',
-                'text_secondary': '#98989D',
-                'text_tertiary': '#636366',
-                'border': '#48484A',
-                'hover_bg': 'rgba(10, 132, 255, 0.12)',
-                'shadow': 'rgba(0, 0, 0, 0.5)',
+                # Backgrounds (Apple Dark Mode)
+                'bg_primary': '#1C1C1E',        # System background
+                'bg_secondary': '#2C2C2E',      # Secondary background
+                'bg_tertiary': '#3A3A3C',       # Tertiary background
+                'card_bg': '#2C2C2E',           # Card/elevated surfaces
+                'grouped_bg': '#1C1C1E',        # Grouped lists background
+                
+                # Accent Colors (Apple System Colors - Dark Mode)
+                'accent_blue': '#0A84FF',       # Primary actions
+                'accent_green': '#30D158',      # Success, positive
+                'accent_orange': '#FF9F0A',     # Warnings
+                'accent_red': '#FF453A',        # Destructive, errors
+                'accent_purple': '#BF5AF2',     # Premium features (dark mode adjusted)
+                'accent_indigo': '#5E5CE6',     # Alternative accent
+                'accent_teal': '#64D2FF',       # Info, alternative
+                'accent_pink': '#FF375F',       # Special highlights
+                'accent_yellow': '#FFD60A',     # Attention
+                
+                # Text (Apple Typography - Dark Mode)
+                'text_primary': '#FFFFFF',      # Primary text
+                'text_secondary': '#98989D',    # Secondary text
+                'text_tertiary': '#636366',     # Tertiary/disabled text
+                
+                # Borders & Separators
+                'border': '#48484A',            # Standard borders
+                'separator': '#38383A',         # Separator lines
+                
+                # Interaction States
+                'hover_bg': 'rgba(10, 132, 255, 0.15)',
+                'selection_bg': 'rgba(10, 132, 255, 0.25)',
+                'shadow': 'rgba(0, 0, 0, 0.6)',
+                
+                # Semantic Backgrounds
+                'warning_bg': '#3A3420',
+                'warning_text': '#FFD60A',
+                'success_bg': '#1E3A2E',
+                'success_text': '#30D158',
+                'error_bg': '#3A1F1F',
+                'error_text': '#FF453A',
             }
         else:
             return {
-                'bg_primary': '#F5F5F7',
-                'bg_secondary': '#FFFFFF',
-                'bg_tertiary': '#FAFAFA',
-                'card_bg': '#FFFFFF',
-                'accent_blue': '#007AFF',
-                'accent_green': '#34C759',
-                'accent_orange': '#FF9500',
-                'accent_red': '#FF3B30',
-                'text_primary': '#1C1C1E',
-                'text_secondary': '#8E8E93',
-                'text_tertiary': '#AEAEB2',
-                'border': '#D1D1D6',
+                # Backgrounds (Apple Light Mode)
+                'bg_primary': '#F5F5F7',        # System background (light gray)
+                'bg_secondary': '#FFFFFF',      # Secondary background (white)
+                'bg_tertiary': '#FAFAFA',       # Tertiary background
+                'card_bg': '#FFFFFF',           # Card/elevated surfaces (white)
+                'grouped_bg': '#F2F2F7',        # Grouped lists background
+                
+                # Accent Colors (Apple System Colors - Light Mode)
+                'accent_blue': '#007AFF',       # Primary actions
+                'accent_green': '#34C759',      # Success, positive
+                'accent_orange': '#FF9500',     # Warnings
+                'accent_red': '#FF3B30',        # Destructive, errors
+                'accent_purple': '#AF52DE',     # Premium features (App Store purple)
+                'accent_indigo': '#5856D6',     # Alternative accent
+                'accent_teal': '#5AC8FA',       # Info, alternative
+                'accent_pink': '#FF2D55',       # Special highlights
+                'accent_yellow': '#FFCC00',     # Attention
+                
+                # Text (Apple Typography - Light Mode)
+                'text_primary': '#1C1C1E',      # Primary text (almost black)
+                'text_secondary': '#8E8E93',    # Secondary text
+                'text_tertiary': '#AEAEB2',     # Tertiary/disabled text
+                
+                # Borders & Separators
+                'border': '#D1D1D6',            # Standard borders
+                'separator': '#C6C6C8',         # Separator lines
+                
+                # Interaction States
                 'hover_bg': 'rgba(0, 122, 255, 0.08)',
-                'shadow': 'rgba(0, 0, 0, 0.08)',
+                'selection_bg': 'rgba(0, 122, 255, 0.15)',
+                'shadow': '0 2px 8px rgba(0, 0, 0, 0.08)',  # Card shadow
+                
+                # Semantic Backgrounds
+                'warning_bg': '#FFF9E6',
+                'warning_text': '#8B6914',
+                'success_bg': '#E8F5E9',
+                'success_text': '#1E7B34',
+                'error_bg': '#FFEAEA',
+                'error_text': '#C41E3A',
             }
     
     def _apply_theme(self):
@@ -176,7 +226,8 @@ class MainWindow(QMainWindow):
             
             QWidget {{
                 color: {colors['text_primary']};
-                font-size: 14px;
+                font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+                font-size: 13px;
             }}
             
             QTabWidget::pane {{
@@ -187,12 +238,12 @@ class MainWindow(QMainWindow):
             QTabBar::tab {{
                 background-color: {colors['bg_tertiary']};
                 color: {colors['text_secondary']};
-                padding: 12px 24px;
+                padding: 10px 20px;
                 border: none;
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
-                margin-right: 4px;
-                font-size: 14px;
+                margin-right: 2px;
+                font-size: 13px;
                 font-weight: 500;
             }}
             
@@ -204,6 +255,7 @@ class MainWindow(QMainWindow):
             
             QTabBar::tab:hover:!selected {{
                 background-color: {colors['bg_secondary']};
+                opacity: 0.9;
             }}
             
             QLineEdit, QTextEdit, QPlainTextEdit {{
@@ -380,10 +432,10 @@ class MainWindow(QMainWindow):
                     padding: 12px 24px;
                 }}
                 QPushButton:hover {{
-                    background-color: #30B350;
+                    opacity: 0.85;
                 }}
                 QPushButton:pressed {{
-                    background-color: #2BA048;
+                    opacity: 0.7;
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -405,10 +457,10 @@ class MainWindow(QMainWindow):
                     padding: 12px 24px;
                 }}
                 QPushButton:hover {{
-                    background-color: #E68600;
+                    opacity: 0.85;
                 }}
                 QPushButton:pressed {{
-                    background-color: #CC7700;
+                    opacity: 0.7;
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -430,10 +482,10 @@ class MainWindow(QMainWindow):
                     padding: 12px 24px;
                 }}
                 QPushButton:hover {{
-                    background-color: #E6342B;
+                    opacity: 0.85;
                 }}
                 QPushButton:pressed {{
-                    background-color: #CC2E26;
+                    opacity: 0.7;
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -848,9 +900,7 @@ class MainWindow(QMainWindow):
                 background-color: {colors['bg_tertiary']};
             }}
             QProgressBar::chunk {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {colors['accent_green']}, 
-                    stop:1 #32de84);
+                background-color: {colors['accent_green']};
                 border-radius: 4px;
             }}
         """)
@@ -904,7 +954,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         self.refresh_all_btn.setToolTip("Refresh status of all processing cloud jobs")
@@ -917,7 +967,7 @@ class MainWindow(QMainWindow):
         self.batch_upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.batch_upload_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #AF52DE;
+                background-color: {colors['accent_purple']};
                 color: white;
                 border: none;
                 border-radius: 8px;
@@ -926,7 +976,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #9F42CE;
+                opacity: 0.85;
             }}
         """)
         self.batch_upload_btn.setToolTip("Upload all completed sessions that haven't been uploaded yet")
@@ -1030,7 +1080,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         self.theme_toggle_btn.clicked.connect(self._toggle_theme)
@@ -1089,7 +1139,7 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 font-size: 16px;
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {colors['border']};
                 border-radius: 8px;
                 margin-top: 10px;
                 padding: 15px;
@@ -1139,7 +1189,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #30B350;
+                opacity: 0.85;
             }}
         """)
         button_layout.addWidget(preview_btn)
@@ -1159,7 +1209,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         button_layout.addWidget(refresh_btn)
@@ -1174,7 +1224,7 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 font-size: 16px;
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {colors['border']};
                 border-radius: 8px;
                 margin-top: 10px;
                 padding: 15px;
@@ -1196,7 +1246,7 @@ class MainWindow(QMainWindow):
             f"OpenAI: {'✓ Configured' if openai_key else '✗ Not configured'}"
         )
         openai_status.setStyleSheet(
-            f"color: {'#27ae60' if openai_key else '#e74c3c'}; font-size: 14px;"
+            f"color: {colors['accent_green'] if openai_key else colors['accent_red']}; font-size: 13px;"
         )
         api_layout.addWidget(openai_status)
 
@@ -1204,7 +1254,7 @@ class MainWindow(QMainWindow):
             f"Hume AI: {'✓ Configured' if hume_key else '✗ Not configured'}"
         )
         hume_status.setStyleSheet(
-            f"color: {'#27ae60' if hume_key else '#e74c3c'}; font-size: 14px;"
+            f"color: {colors['accent_green'] if hume_key else colors['accent_red']}; font-size: 13px;"
         )
         api_layout.addWidget(hume_status)
 
@@ -1212,7 +1262,7 @@ class MainWindow(QMainWindow):
             f"Memories.ai: {'✓ Configured' if mem_key else '✗ Not configured'}"
         )
         mem_status.setStyleSheet(
-            f"color: {'#27ae60' if mem_key else '#e74c3c'}; font-size: 14px;"
+            f"color: {colors['accent_green'] if mem_key else colors['accent_red']}; font-size: 13px;"
         )
         api_layout.addWidget(mem_status)
 
@@ -1224,7 +1274,7 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 font-size: 16px;
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {colors['border']};
                 border-radius: 8px;
                 margin-top: 10px;
                 padding: 15px;
@@ -1340,7 +1390,7 @@ class MainWindow(QMainWindow):
                 margin-top: 15px;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         storage_mgmt_btn.clicked.connect(self._on_manage_cloud_storage)
@@ -1386,9 +1436,9 @@ class MainWindow(QMainWindow):
             "Changes take effect immediately for new operations."
         )
         colors = self._get_colors()
-        warning_bg = '#FFF3CD' if not self.dark_mode else '#3A3420'
-        warning_text = '#856404' if not self.dark_mode else '#FFD700'
-        warning_border = '#FFC107' if not self.dark_mode else '#B8860B'
+        warning_bg = colors['warning_bg']
+        warning_text = colors['warning_text']
+        warning_border = colors['accent_yellow']
         warning_label.setStyleSheet(f"""
             QLabel {{
                 background-color: {warning_bg};
@@ -6144,7 +6194,7 @@ Historical Trends, Snapshot Analysis</p>
                 upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 upload_btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: #AF52DE;
+                        background-color: {colors['accent_purple']};
                         color: white;
                         border: none;
                         border-radius: 8px;
@@ -6153,7 +6203,7 @@ Historical Trends, Snapshot Analysis</p>
                         font-weight: 600;
                     }}
                     QPushButton:hover {{
-                        background-color: #9F42CE;
+                        opacity: 0.85;
                     }}
                     QPushButton:disabled {{
                         background-color: {colors['text_tertiary']};
@@ -6219,7 +6269,7 @@ Historical Trends, Snapshot Analysis</p>
                             font-weight: 600;
                         }}
                         QPushButton:hover {{
-                            background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                            opacity: 0.85;
                         }}
                         QPushButton:disabled {{
                             background-color: {colors['text_tertiary']};
@@ -6281,7 +6331,7 @@ Historical Trends, Snapshot Analysis</p>
                             font-weight: 600;
                         }}
                         QPushButton:hover {{
-                            background-color: #30B350;
+                            opacity: 0.85;
                         }}
                     """)
                     details_btn.clicked.connect(lambda checked, jid=job.job_id: self._on_show_cloud_details(jid))
@@ -6317,7 +6367,7 @@ Historical Trends, Snapshot Analysis</p>
                         font-weight: 600;
                     }}
                     QPushButton:hover {{
-                        background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                        opacity: 0.85;
                     }}
                     QPushButton:disabled {{
                         background-color: {colors['text_tertiary']};
@@ -6339,7 +6389,7 @@ Historical Trends, Snapshot Analysis</p>
                 regen_memories_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 regen_memories_btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: #AF52DE;
+                        background-color: {colors['accent_purple']};
                         color: white;
                         border: none;
                         border-radius: 6px;
@@ -6348,7 +6398,7 @@ Historical Trends, Snapshot Analysis</p>
                         font-weight: 600;
                     }}
                     QPushButton:hover {{
-                        background-color: #9F42CE;
+                        opacity: 0.85;
                     }}
                     QPushButton:disabled {{
                         background-color: {colors['text_tertiary']};
@@ -6405,7 +6455,7 @@ Historical Trends, Snapshot Analysis</p>
                 view_comprehensive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 view_comprehensive_btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: #AF52DE;
+                        background-color: {colors['accent_purple']};
                         color: white;
                         border: none;
                         border-radius: 8px;
@@ -6414,7 +6464,7 @@ Historical Trends, Snapshot Analysis</p>
                         font-weight: 600;
                     }}
                     QPushButton:hover {{
-                        background-color: #9F42CE;
+                        opacity: 0.85;
                     }}
                 """)
                 view_comprehensive_btn.setToolTip("View full AI-generated report with historical trends")
@@ -6465,7 +6515,7 @@ Historical Trends, Snapshot Analysis</p>
             view_summary_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             view_summary_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: #AF52DE;
+                    background-color: {colors['accent_purple']};
                     color: white;
                     border: none;
                     border-radius: 8px;
@@ -6474,7 +6524,7 @@ Historical Trends, Snapshot Analysis</p>
                     font-weight: 600;
                 }}
                 QPushButton:hover {{
-                    background-color: #9F42CE;
+                    opacity: 0.85;
                 }}
             """)
             view_summary_btn.setToolTip("View AI-generated session summary")
@@ -6496,7 +6546,7 @@ Historical Trends, Snapshot Analysis</p>
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         show_files_btn.clicked.connect(lambda: self._on_show_files(session.session_id))
@@ -6530,7 +6580,7 @@ Historical Trends, Snapshot Analysis</p>
             tech_details_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             tech_details_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: #AF52DE;
+                    background-color: {colors['accent_purple']};
                     color: white;
                     border: none;
                     border-radius: 8px;
@@ -6539,7 +6589,7 @@ Historical Trends, Snapshot Analysis</p>
                     font-weight: 600;
                 }}
                 QPushButton:hover {{
-                    background-color: #9F42CE;
+                    opacity: 0.85;
                 }}
             """)
             tech_details_btn.setToolTip("View raw snapshot data, AI responses, and voting engine details")
