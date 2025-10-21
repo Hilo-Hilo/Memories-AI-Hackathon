@@ -72,6 +72,9 @@ class MainWindow(QMainWindow):
 
         # Camera initialization flag (prevent re-scanning on theme changes)
         self._cameras_initialized = False
+        
+        # Developer mode state (for showing technical details)
+        self._developer_mode_enabled = False
 
         # Cloud upload tracking
         self.active_uploads = {}  # Dict[session_id, List[job_id]]
@@ -1459,6 +1462,7 @@ class MainWindow(QMainWindow):
     def _toggle_developer_mode(self, state):
         """Toggle developer options tab visibility."""
         enabled = (state == Qt.CheckState.Checked.value)
+        self._developer_mode_enabled = enabled  # Track state for technical details button
         self.settings_tabs.setTabEnabled(1, enabled)
         
         if enabled:
@@ -1467,6 +1471,10 @@ class MainWindow(QMainWindow):
         else:
             self.settings_tabs.setCurrentIndex(0)  # Switch back to general
             logger.info("Developer options disabled")
+        
+        # Refresh reports tab to show/hide technical details buttons
+        if hasattr(self, 'reports_tab'):
+            self._load_sessions_list()
     
     def _create_label_profiles_section(self) -> QWidget:
         """Create label profiles editor section."""
@@ -6514,6 +6522,29 @@ Historical Trends, Snapshot Analysis</p>
         """)
         delete_btn.clicked.connect(lambda: self._on_delete_session(session.session_id))
         action_layout.addWidget(delete_btn)
+        
+        # Technical Details button (developer only)
+        if self._developer_mode_enabled:
+            tech_details_btn = QPushButton("🔬 Technical Details")
+            tech_details_btn.setMinimumHeight(32)
+            tech_details_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            tech_details_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #AF52DE;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 6px 14px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background-color: #9F42CE;
+                }}
+            """)
+            tech_details_btn.setToolTip("View raw snapshot data, AI responses, and voting engine details")
+            tech_details_btn.clicked.connect(lambda: self._on_show_technical_details(session.session_id))
+            action_layout.addWidget(tech_details_btn)
 
         action_layout.addStretch()
 
@@ -6522,6 +6553,462 @@ Historical Trends, Snapshot Analysis</p>
 
         return card
 
+    def _on_show_technical_details(self, session_id: str):
+        """Show technical snapshot details dialog with camera and screen tabs."""
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QTabWidget, QTableWidget, QTableWidgetItem,
+            QHeaderView, QDialogButtonBox, QLabel
+        )
+        from pathlib import Path
+        
+        # Get session and snapshots
+        session = self.database.get_session(session_id)
+        if not session:
+            QMessageBox.critical(self, "Error", "Session not found")
+            return
+        
+        snapshots = self.database.get_snapshots_for_session(session_id)
+        
+        if not snapshots:
+            QMessageBox.information(
+                self,
+                "No Snapshots",
+                f"No snapshots found for session '{session.task_name}'"
+            )
+            return
+        
+        colors = self._get_colors()
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"🔬 Technical Snapshot Details - {session.task_name}")
+        dialog.setMinimumSize(1000, 700)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Info header
+        info_label = QLabel(
+            f"Session: {session.task_name} | "
+            f"Profile: {session.label_profile_name} | "
+            f"Total Snapshots: {len(snapshots)}"
+        )
+        info_label.setStyleSheet(f"color: {colors['text_secondary']}; margin-bottom: 10px;")
+        layout.addWidget(info_label)
+        
+        # Create tab widget
+        tabs = QTabWidget()
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+                background-color: {colors['card_bg']};
+            }}
+            QTabBar::tab {{
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_secondary']};
+                padding: 10px 20px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                margin-right: 2px;
+            }}
+            QTabBar::tab:selected {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                font-weight: 600;
+            }}
+        """)
+        
+        # Camera snapshots tab
+        cam_table = self._create_snapshot_table(snapshots, "cam", session_id)
+        tabs.addTab(cam_table, "📷 Camera Snapshots")
+        
+        # Screen snapshots tab
+        screen_table = self._create_snapshot_table(snapshots, "screen", session_id)
+        tabs.addTab(screen_table, "🖥️ Screen Snapshots")
+        
+        layout.addWidget(tabs)
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+        """)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+    
+    def _create_snapshot_table(self, all_snapshots, kind: str, session_id: str):
+        """Create snapshot table for specific kind (cam or screen)."""
+        from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView
+        from PyQt6.QtCore import Qt
+        
+        # Filter snapshots by kind
+        snapshots = [s for s in all_snapshots if kind in s.jpeg_path.lower()]
+        
+        colors = self._get_colors()
+        
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        table = QTableWidget()
+        table.setColumnCount(6)
+        table.setHorizontalHeaderLabels([
+            "Timestamp", "Filename", "Top Label", "Confidence", "Status", "Label Count"
+        ])
+        table.setRowCount(len(snapshots))
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        table.setSortingEnabled(True)
+        table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                gridline-color: {colors['border']};
+                alternate-background-color: {colors['bg_tertiary']};
+            }}
+            QTableWidget::item {{
+                padding: 8px;
+            }}
+            QHeaderView::section {{
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_primary']};
+                padding: 8px;
+                border: none;
+                font-weight: 600;
+            }}
+        """)
+        table.setAlternatingRowColors(True)
+        
+        # Configure column widths
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        
+        # Populate table
+        for row_idx, snapshot in enumerate(snapshots):
+            # Timestamp
+            time_str = snapshot.timestamp.strftime("%H:%M:%S") if snapshot.timestamp else "N/A"
+            table.setItem(row_idx, 0, QTableWidgetItem(time_str))
+            
+            # Filename
+            from pathlib import Path
+            filename = Path(snapshot.jpeg_path).name
+            table.setItem(row_idx, 1, QTableWidgetItem(filename))
+            
+            # Top label and confidence
+            if snapshot.vision_labels:
+                # Get label with highest confidence
+                top_label = max(snapshot.vision_labels.items(), key=lambda x: x[1])
+                table.setItem(row_idx, 2, QTableWidgetItem(top_label[0]))
+                table.setItem(row_idx, 3, QTableWidgetItem(f"{top_label[1]:.0%}"))
+                table.setItem(row_idx, 5, QTableWidgetItem(str(len(snapshot.vision_labels))))
+            else:
+                table.setItem(row_idx, 2, QTableWidgetItem("Analyzing..."))
+                table.setItem(row_idx, 3, QTableWidgetItem("-"))
+                table.setItem(row_idx, 5, QTableWidgetItem("0"))
+            
+            # Status
+            from ..core.models import UploadStatus
+            status_map = {
+                UploadStatus.PENDING: "⏳ Pending",
+                UploadStatus.UPLOADING: "⬆️ Uploading",
+                UploadStatus.SUCCESS: "✅ Success",
+                UploadStatus.FAILED: "❌ Failed"
+            }
+            status_text = status_map.get(snapshot.upload_status, str(snapshot.upload_status.value))
+            status_item = QTableWidgetItem(status_text)
+            
+            # Color code status
+            if snapshot.upload_status == UploadStatus.SUCCESS:
+                status_item.setForeground(Qt.GlobalColor.darkGreen if not self.dark_mode else Qt.GlobalColor.green)
+            elif snapshot.upload_status == UploadStatus.FAILED:
+                status_item.setForeground(Qt.GlobalColor.red)
+            
+            table.setItem(row_idx, 4, status_item)
+            
+            # Store snapshot object in row for later retrieval
+            table.item(row_idx, 0).setData(Qt.ItemDataRole.UserRole, snapshot)
+        
+        # Double-click to open detail viewer
+        table.doubleClicked.connect(lambda: self._on_table_row_double_clicked(table))
+        
+        layout.addWidget(table)
+        
+        # Instructions
+        hint_label = QLabel("💡 Double-click any row to view detailed analysis")
+        hint_label.setStyleSheet(f"color: {colors['text_secondary']}; font-style: italic; margin-top: 8px;")
+        layout.addWidget(hint_label)
+        
+        return widget
+    
+    def _on_table_row_double_clicked(self, table):
+        """Handle double-click on snapshot table row."""
+        current_row = table.currentRow()
+        if current_row < 0:
+            return
+        
+        # Get snapshot from stored data
+        snapshot = table.item(current_row, 0).data(Qt.ItemDataRole.UserRole)
+        if snapshot:
+            self._show_snapshot_detail_viewer(snapshot)
+    
+    def _show_snapshot_detail_viewer(self, snapshot):
+        """Show detailed view of single snapshot with image, JSON, and voting info."""
+        from PyQt6.QtWidgets import (
+            QDialog, QHBoxLayout, QVBoxLayout, QLabel, QTextEdit,
+            QDialogButtonBox, QSplitter
+        )
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QPixmap
+        from pathlib import Path
+        import json
+        
+        colors = self._get_colors()
+        
+        # Create dialog
+        dialog = QDialog(self)
+        filename = Path(snapshot.jpeg_path).name
+        dialog.setWindowTitle(f"Snapshot Detail: {filename}")
+        dialog.setMinimumSize(1200, 700)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Main content splitter (image | details)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # LEFT PANEL: Image Preview
+        image_widget = QWidget()
+        image_layout = QVBoxLayout(image_widget)
+        
+        image_label_header = QLabel("📸 Snapshot Preview")
+        image_label_header.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']}; margin-bottom: 8px;")
+        image_layout.addWidget(image_label_header)
+        
+        image_display = QLabel()
+        image_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        image_display.setStyleSheet(f"""
+            QLabel {{
+                background-color: {colors['bg_secondary']};
+                border: 2px solid {colors['border']};
+                border-radius: 8px;
+                padding: 10px;
+            }}
+        """)
+        image_display.setMinimumSize(400, 300)
+        
+        # Load and display image
+        try:
+            jpeg_path = Path(snapshot.jpeg_path)
+            if jpeg_path.exists():
+                pixmap = QPixmap(str(jpeg_path))
+                # Scale to fit while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaled(
+                    400, 400,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                image_display.setPixmap(scaled_pixmap)
+            else:
+                image_display.setText("❌ Image file not found")
+                image_display.setStyleSheet(f"""
+                    QLabel {{
+                        color: {colors['accent_red']};
+                        background-color: {colors['bg_secondary']};
+                        border: 2px dashed {colors['border']};
+                        border-radius: 8px;
+                    }}
+                """)
+        except Exception as e:
+            logger.error(f"Failed to load image: {e}")
+            image_display.setText(f"❌ Failed to load image\n{str(e)}")
+        
+        image_layout.addWidget(image_display)
+        image_layout.addStretch()
+        
+        splitter.addWidget(image_widget)
+        
+        # RIGHT PANEL: Details (split into JSON and Voting)
+        details_widget = QWidget()
+        details_layout = QVBoxLayout(details_widget)
+        
+        # Top: Raw JSON Response
+        json_label = QLabel("🔍 Raw AI Response")
+        json_label.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']}; margin-bottom: 8px;")
+        details_layout.addWidget(json_label)
+        
+        json_display = QTextEdit()
+        json_display.setReadOnly(True)
+        json_display.setStyleSheet(f"""
+            QTextEdit {{
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+                padding: 10px;
+            }}
+        """)
+        
+        # Load vision JSON
+        try:
+            if snapshot.vision_json_path:
+                vision_file = self.config.get_data_dir() / snapshot.vision_json_path
+                if vision_file.exists():
+                    with open(vision_file, 'r') as f:
+                        vision_data = json.load(f)
+                    json_display.setPlainText(json.dumps(vision_data, indent=2))
+                else:
+                    json_display.setPlainText("Vision JSON file not found")
+            else:
+                json_display.setPlainText("Not yet analyzed - no vision data available")
+        except Exception as e:
+            logger.error(f"Failed to load vision JSON: {e}")
+            json_display.setPlainText(f"Error loading JSON: {str(e)}")
+        
+        details_layout.addWidget(json_display)
+        
+        # Bottom: Voting Engine Interpretation
+        voting_label = QLabel("⚙️ Voting Engine Interpretation")
+        voting_label.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']}; margin-top: 12px; margin-bottom: 8px;")
+        details_layout.addWidget(voting_label)
+        
+        voting_display = QTextEdit()
+        voting_display.setReadOnly(True)
+        voting_display.setMaximumHeight(200)
+        voting_display.setStyleSheet(f"""
+            QTextEdit {{
+                font-size: 12px;
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+                padding: 10px;
+            }}
+        """)
+        
+        # Get voting interpretation
+        interpretation = self._get_voting_interpretation(snapshot)
+        voting_display.setPlainText(interpretation)
+        
+        details_layout.addWidget(voting_display)
+        
+        splitter.addWidget(details_widget)
+        
+        # Set splitter proportions (40% image, 60% details)
+        splitter.setSizes([400, 600])
+        
+        layout.addWidget(splitter)
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+        """)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+    
+    def _get_voting_interpretation(self, snapshot) -> str:
+        """Generate voting engine interpretation for snapshot."""
+        lines = []
+        lines.append(f"Snapshot ID: {snapshot.snapshot_id}")
+        lines.append(f"Timestamp: {snapshot.timestamp.strftime('%Y-%m-%d %H:%M:%S') if snapshot.timestamp else 'N/A'}")
+        lines.append(f"Kind: {'Camera' if 'cam' in snapshot.jpeg_path else 'Screen'}")
+        lines.append("")
+        
+        if snapshot.vision_labels:
+            lines.append("DETECTED LABELS:")
+            lines.append("=" * 50)
+            
+            # Try to load profile to show categories
+            try:
+                session = self.database.get_session(snapshot.session_id)
+                if session:
+                    profile_manager = self.config.get_label_profiles_manager()
+                    profile = profile_manager.get_profile(session.label_profile_name)
+                    
+                    # Get label definitions
+                    is_cam = 'cam' in snapshot.jpeg_path.lower()
+                    label_defs = profile.cam_labels if is_cam else profile.screen_labels
+                    
+                    for label_name, confidence in sorted(snapshot.vision_labels.items(), key=lambda x: x[1], reverse=True):
+                        label_def = label_defs.get(label_name)
+                        
+                        if label_def:
+                            threshold = label_def.threshold
+                            category = label_def.category.upper()
+                            passed = "✓ PASSED" if confidence >= threshold else "✗ BELOW THRESHOLD"
+                            
+                            lines.append(f"  • {label_name}: {confidence:.0%}")
+                            lines.append(f"    Category: {category}")
+                            lines.append(f"    Threshold: {threshold:.0%} → {passed}")
+                        else:
+                            # Label not in profile (shouldn't happen but handle gracefully)
+                            lines.append(f"  • {label_name}: {confidence:.0%}")
+                            lines.append(f"    (Not in profile)")
+                        
+                        lines.append("")
+            
+            except Exception as e:
+                logger.error(f"Failed to load profile info: {e}")
+                # Fallback: just show labels
+                for label_name, confidence in sorted(snapshot.vision_labels.items(), key=lambda x: x[1], reverse=True):
+                    lines.append(f"  • {label_name}: {confidence:.0%}")
+            
+            lines.append("")
+            lines.append("VOTING CONTRIBUTION:")
+            lines.append("=" * 50)
+            lines.append("This snapshot was added to the K=3 hysteresis buffer.")
+            lines.append("State transitions occur when ≥2 of 3 snapshots show")
+            lines.append("the same pattern (distraction/focus/absence).")
+            lines.append("")
+            lines.append("Note: Full voting history requires runtime state machine")
+            lines.append("data which is not persisted to database.")
+            
+        else:
+            lines.append("STATUS: Not yet analyzed by Vision API")
+            lines.append("")
+            lines.append(f"Upload Status: {snapshot.upload_status.value}")
+            if snapshot.error_message:
+                lines.append(f"Error: {snapshot.error_message}")
+            lines.append(f"Retry Count: {snapshot.retry_count}")
+        
+        return "\n".join(lines)
+    
     def _format_duration(self, session) -> str:
         """Format session duration."""
         if not session.ended_at:
