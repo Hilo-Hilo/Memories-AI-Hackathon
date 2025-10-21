@@ -140,6 +140,12 @@ class Database:
         if not row:
             return None
         
+        # Handle label_profile_name with backwards compatibility
+        try:
+            label_profile_name = row['label_profile_name']
+        except (KeyError, IndexError):
+            label_profile_name = 'Default'
+        
         return Session(
             session_id=row['session_id'],
             started_at=datetime.fromisoformat(row['started_at']),
@@ -148,7 +154,7 @@ class Database:
             quality_profile=QualityProfile(row['quality_profile']),
             screen_enabled=bool(row['screen_enabled']),
             status=SessionStatus(row['status']),
-            label_profile_name=row.get('label_profile_name', 'Default'),  # Backwards compatible
+            label_profile_name=label_profile_name,
             cam_mp4_path=row['cam_mp4_path'],
             screen_mp4_path=row['screen_mp4_path'],
             snapshots_dir=row['snapshots_dir'],
@@ -179,6 +185,12 @@ class Database:
 
         sessions = []
         for row in rows:
+            # Handle label_profile_name with backwards compatibility
+            try:
+                label_profile_name = row['label_profile_name']
+            except (KeyError, IndexError):
+                label_profile_name = 'Default'
+            
             sessions.append(Session(
                 session_id=row['session_id'],
                 started_at=datetime.fromisoformat(row['started_at']),
@@ -187,7 +199,7 @@ class Database:
                 quality_profile=QualityProfile(row['quality_profile']),
                 screen_enabled=bool(row['screen_enabled']),
                 status=SessionStatus(row['status']),
-                label_profile_name=row.get('label_profile_name', 'Default'),  # Backwards compatible
+                label_profile_name=label_profile_name,
                 cam_mp4_path=row['cam_mp4_path'],
                 screen_mp4_path=row['screen_mp4_path'],
                 snapshots_dir=row['snapshots_dir'],
