@@ -3375,24 +3375,26 @@ Return as markdown with clear sections and formatting."""
             # Update progress bar with color coding
             self.focus_progress_bar.setValue(int(focus_ratio))
             
-            # Change progress bar color based on focus ratio
+            # Change progress bar color based on focus ratio (Apple semantic colors)
+            colors = self._get_colors()
+            
             if focus_ratio >= 80:
-                color = "#27ae60"  # Green - excellent
+                color = colors['accent_green']  # Excellent
             elif focus_ratio >= 60:
-                color = "#f39c12"  # Orange - good
+                color = colors['accent_orange']  # Good
             else:
-                color = "#e74c3c"  # Red - needs improvement
+                color = colors['accent_red']  # Needs improvement
             
             self.focus_progress_bar.setStyleSheet(f"""
                 QProgressBar {{
-                    border: 1px solid #bdc3c7;
+                    border: none;
                     border-radius: 4px;
-                    height: 20px;
-                    background-color: #ecf0f1;
+                    height: 8px;
+                    background-color: {colors['bg_tertiary']};
                 }}
                 QProgressBar::chunk {{
                     background-color: {color};
-                    border-radius: 3px;
+                    border-radius: 4px;
                 }}
             """)
             
