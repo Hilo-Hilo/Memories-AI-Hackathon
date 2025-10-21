@@ -1610,6 +1610,15 @@ class MainWindow(QMainWindow):
         
         edit_cam_label_btn = QPushButton("Edit Selected")
         edit_cam_label_btn.clicked.connect(lambda: self._on_edit_label("cam"))
+        edit_cam_label_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_orange']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+        """)
         cam_btn_layout.addWidget(edit_cam_label_btn)
         
         remove_cam_label_btn = QPushButton("Remove Selected")
@@ -1674,6 +1683,15 @@ class MainWindow(QMainWindow):
         
         edit_screen_label_btn = QPushButton("Edit Selected")
         edit_screen_label_btn.clicked.connect(lambda: self._on_edit_label("screen"))
+        edit_screen_label_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_orange']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+        """)
         screen_btn_layout.addWidget(edit_screen_label_btn)
         
         remove_screen_label_btn = QPushButton("Remove Selected")
@@ -1813,6 +1831,17 @@ class MainWindow(QMainWindow):
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+        """)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
@@ -2019,23 +2048,32 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
         
+        # Style the form labels
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        
         # Label name
+        name_label = QLabel("Label Name:")
+        name_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
         name_input = QLineEdit()
         if current_label:
             name_input.setText(current_label.name)
             name_input.setReadOnly(True)  # Can't change name when editing
         else:
             name_input.setPlaceholderText("e.g., HeadAway, StandingUp, VideoOnScreen")
-        form.addRow("Label Name:", name_input)
+        form.addRow(name_label, name_input)
         
         # Category
+        category_label = QLabel("Category:")
+        category_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
         category_combo = QComboBox()
         category_combo.addItems(["distraction", "focus", "absence", "borderline", "neutral"])
         if current_label:
             category_combo.setCurrentText(current_label.category)
-        form.addRow("Category:", category_combo)
+        form.addRow(category_label, category_combo)
         
         # Threshold
+        threshold_label = QLabel("Confidence Threshold:")
+        threshold_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
         threshold_spin = QDoubleSpinBox()
         threshold_spin.setRange(0.0, 1.0)
         threshold_spin.setSingleStep(0.05)
@@ -2044,16 +2082,18 @@ class MainWindow(QMainWindow):
             threshold_spin.setValue(current_label.threshold)
         else:
             threshold_spin.setValue(0.70)
-        form.addRow("Confidence Threshold:", threshold_spin)
+        form.addRow(threshold_label, threshold_spin)
         
         # Description
+        desc_label = QLabel("Description:")
+        desc_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
         desc_input = QTextEdit()
         desc_input.setMaximumHeight(80)
         if current_label:
             desc_input.setPlainText(current_label.description)
         else:
             desc_input.setPlaceholderText("Describe what this label detects...")
-        form.addRow("Description:", desc_input)
+        form.addRow(desc_label, desc_input)
         
         layout.addLayout(form)
         
@@ -2071,6 +2111,17 @@ class MainWindow(QMainWindow):
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+        """)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
