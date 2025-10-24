@@ -70,6 +70,12 @@ class MainWindow(QMainWindow):
         self.session_paused_at = None
         self.session_total_paused_seconds = 0
 
+        # Camera initialization flag (prevent re-scanning on theme changes)
+        self._cameras_initialized = False
+        
+        # Developer mode state (for showing technical details)
+        self._developer_mode_enabled = False
+
         # Cloud upload tracking
         self.active_uploads = {}  # Dict[session_id, List[job_id]]
         self.active_refresh_jobs = set()  # Set[job_id] - Track jobs being refreshed
@@ -122,40 +128,90 @@ class MainWindow(QMainWindow):
         logger.info("Main window initialized")
     
     def _get_colors(self):
-        """Get color palette based on current theme mode."""
+        """Get Apple-native color palette based on current theme mode."""
         if self.dark_mode:
             return {
-                'bg_primary': '#1C1C1E',
-                'bg_secondary': '#2C2C2E',
-                'bg_tertiary': '#3A3A3C',
-                'card_bg': '#2C2C2E',
-                'accent_blue': '#0A84FF',
-                'accent_green': '#30D158',
-                'accent_orange': '#FF9F0A',
-                'accent_red': '#FF453A',
-                'text_primary': '#FFFFFF',
-                'text_secondary': '#98989D',
-                'text_tertiary': '#636366',
-                'border': '#48484A',
-                'hover_bg': 'rgba(10, 132, 255, 0.12)',
-                'shadow': 'rgba(0, 0, 0, 0.5)',
+                # Backgrounds (Apple Dark Mode)
+                'bg_primary': '#1C1C1E',        # System background
+                'bg_secondary': '#2C2C2E',      # Secondary background
+                'bg_tertiary': '#3A3A3C',       # Tertiary background
+                'card_bg': '#2C2C2E',           # Card/elevated surfaces
+                'grouped_bg': '#1C1C1E',        # Grouped lists background
+                
+                # Accent Colors (Apple System Colors - Dark Mode)
+                'accent_blue': '#0A84FF',       # Primary actions
+                'accent_green': '#30D158',      # Success, positive
+                'accent_orange': '#FF9F0A',     # Warnings
+                'accent_red': '#FF453A',        # Destructive, errors
+                'accent_purple': '#BF5AF2',     # Premium features (dark mode adjusted)
+                'accent_indigo': '#5E5CE6',     # Alternative accent
+                'accent_teal': '#64D2FF',       # Info, alternative
+                'accent_pink': '#FF375F',       # Special highlights
+                'accent_yellow': '#FFD60A',     # Attention
+                
+                # Text (Apple Typography - Dark Mode)
+                'text_primary': '#FFFFFF',      # Primary text
+                'text_secondary': '#98989D',    # Secondary text
+                'text_tertiary': '#636366',     # Tertiary/disabled text
+                
+                # Borders & Separators
+                'border': '#48484A',            # Standard borders
+                'separator': '#38383A',         # Separator lines
+                
+                # Interaction States
+                'hover_bg': 'rgba(10, 132, 255, 0.15)',
+                'selection_bg': 'rgba(10, 132, 255, 0.25)',
+                'shadow': 'rgba(0, 0, 0, 0.6)',
+                
+                # Semantic Backgrounds
+                'warning_bg': '#3A3420',
+                'warning_text': '#FFD60A',
+                'success_bg': '#1E3A2E',
+                'success_text': '#30D158',
+                'error_bg': '#3A1F1F',
+                'error_text': '#FF453A',
             }
         else:
             return {
-                'bg_primary': '#F5F5F7',
-                'bg_secondary': '#FFFFFF',
-                'bg_tertiary': '#FAFAFA',
-                'card_bg': '#FFFFFF',
-                'accent_blue': '#007AFF',
-                'accent_green': '#34C759',
-                'accent_orange': '#FF9500',
-                'accent_red': '#FF3B30',
-                'text_primary': '#1C1C1E',
-                'text_secondary': '#8E8E93',
-                'text_tertiary': '#AEAEB2',
-                'border': '#D1D1D6',
+                # Backgrounds (Apple Light Mode)
+                'bg_primary': '#F5F5F7',        # System background (light gray)
+                'bg_secondary': '#FFFFFF',      # Secondary background (white)
+                'bg_tertiary': '#FAFAFA',       # Tertiary background
+                'card_bg': '#FFFFFF',           # Card/elevated surfaces (white)
+                'grouped_bg': '#F2F2F7',        # Grouped lists background
+                
+                # Accent Colors (Apple System Colors - Light Mode)
+                'accent_blue': '#007AFF',       # Primary actions
+                'accent_green': '#34C759',      # Success, positive
+                'accent_orange': '#FF9500',     # Warnings
+                'accent_red': '#FF3B30',        # Destructive, errors
+                'accent_purple': '#AF52DE',     # Premium features (App Store purple)
+                'accent_indigo': '#5856D6',     # Alternative accent
+                'accent_teal': '#5AC8FA',       # Info, alternative
+                'accent_pink': '#FF2D55',       # Special highlights
+                'accent_yellow': '#FFCC00',     # Attention
+                
+                # Text (Apple Typography - Light Mode)
+                'text_primary': '#1C1C1E',      # Primary text (almost black)
+                'text_secondary': '#8E8E93',    # Secondary text
+                'text_tertiary': '#AEAEB2',     # Tertiary/disabled text
+                
+                # Borders & Separators
+                'border': '#D1D1D6',            # Standard borders
+                'separator': '#C6C6C8',         # Separator lines
+                
+                # Interaction States
                 'hover_bg': 'rgba(0, 122, 255, 0.08)',
-                'shadow': 'rgba(0, 0, 0, 0.08)',
+                'selection_bg': 'rgba(0, 122, 255, 0.15)',
+                'shadow': '0 2px 8px rgba(0, 0, 0, 0.08)',  # Card shadow
+                
+                # Semantic Backgrounds
+                'warning_bg': '#FFF9E6',
+                'warning_text': '#8B6914',
+                'success_bg': '#E8F5E9',
+                'success_text': '#1E7B34',
+                'error_bg': '#FFEAEA',
+                'error_text': '#C41E3A',
             }
     
     def _apply_theme(self):
@@ -170,7 +226,8 @@ class MainWindow(QMainWindow):
             
             QWidget {{
                 color: {colors['text_primary']};
-                font-size: 14px;
+                font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+                font-size: 13px;
             }}
             
             QTabWidget::pane {{
@@ -181,12 +238,12 @@ class MainWindow(QMainWindow):
             QTabBar::tab {{
                 background-color: {colors['bg_tertiary']};
                 color: {colors['text_secondary']};
-                padding: 12px 24px;
+                padding: 10px 20px;
                 border: none;
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
-                margin-right: 4px;
-                font-size: 14px;
+                margin-right: 2px;
+                font-size: 13px;
                 font-weight: 500;
             }}
             
@@ -198,6 +255,7 @@ class MainWindow(QMainWindow):
             
             QTabBar::tab:hover:!selected {{
                 background-color: {colors['bg_secondary']};
+                opacity: 0.9;
             }}
             
             QLineEdit, QTextEdit, QPlainTextEdit {{
@@ -374,10 +432,10 @@ class MainWindow(QMainWindow):
                     padding: 12px 24px;
                 }}
                 QPushButton:hover {{
-                    background-color: #30B350;
+                    opacity: 0.85;
                 }}
                 QPushButton:pressed {{
-                    background-color: #2BA048;
+                    opacity: 0.7;
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -399,10 +457,10 @@ class MainWindow(QMainWindow):
                     padding: 12px 24px;
                 }}
                 QPushButton:hover {{
-                    background-color: #E68600;
+                    opacity: 0.85;
                 }}
                 QPushButton:pressed {{
-                    background-color: #CC7700;
+                    opacity: 0.7;
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -424,10 +482,10 @@ class MainWindow(QMainWindow):
                     padding: 12px 24px;
                 }}
                 QPushButton:hover {{
-                    background-color: #E6342B;
+                    opacity: 0.85;
                 }}
                 QPushButton:pressed {{
-                    background-color: #CC2E26;
+                    opacity: 0.7;
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -842,9 +900,7 @@ class MainWindow(QMainWindow):
                 background-color: {colors['bg_tertiary']};
             }}
             QProgressBar::chunk {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {colors['accent_green']}, 
-                    stop:1 #32de84);
+                background-color: {colors['accent_green']};
                 border-radius: 4px;
             }}
         """)
@@ -898,7 +954,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         self.refresh_all_btn.setToolTip("Refresh status of all processing cloud jobs")
@@ -911,7 +967,7 @@ class MainWindow(QMainWindow):
         self.batch_upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.batch_upload_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #AF52DE;
+                background-color: {colors['accent_purple']};
                 color: white;
                 border: none;
                 border-radius: 8px;
@@ -920,7 +976,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #9F42CE;
+                opacity: 0.85;
             }}
         """)
         self.batch_upload_btn.setToolTip("Upload all completed sessions that haven't been uploaded yet")
@@ -1024,7 +1080,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         self.theme_toggle_btn.clicked.connect(self._toggle_theme)
@@ -1083,7 +1139,7 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 font-size: 16px;
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {colors['border']};
                 border-radius: 8px;
                 margin-top: 10px;
                 padding: 15px;
@@ -1133,7 +1189,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: #30B350;
+                opacity: 0.85;
             }}
         """)
         button_layout.addWidget(preview_btn)
@@ -1153,7 +1209,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         button_layout.addWidget(refresh_btn)
@@ -1168,7 +1224,7 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 font-size: 16px;
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {colors['border']};
                 border-radius: 8px;
                 margin-top: 10px;
                 padding: 15px;
@@ -1190,7 +1246,7 @@ class MainWindow(QMainWindow):
             f"OpenAI: {'✓ Configured' if openai_key else '✗ Not configured'}"
         )
         openai_status.setStyleSheet(
-            f"color: {'#27ae60' if openai_key else '#e74c3c'}; font-size: 14px;"
+            f"color: {colors['accent_green'] if openai_key else colors['accent_red']}; font-size: 13px;"
         )
         api_layout.addWidget(openai_status)
 
@@ -1198,7 +1254,7 @@ class MainWindow(QMainWindow):
             f"Hume AI: {'✓ Configured' if hume_key else '✗ Not configured'}"
         )
         hume_status.setStyleSheet(
-            f"color: {'#27ae60' if hume_key else '#e74c3c'}; font-size: 14px;"
+            f"color: {colors['accent_green'] if hume_key else colors['accent_red']}; font-size: 13px;"
         )
         api_layout.addWidget(hume_status)
 
@@ -1206,7 +1262,7 @@ class MainWindow(QMainWindow):
             f"Memories.ai: {'✓ Configured' if mem_key else '✗ Not configured'}"
         )
         mem_status.setStyleSheet(
-            f"color: {'#27ae60' if mem_key else '#e74c3c'}; font-size: 14px;"
+            f"color: {colors['accent_green'] if mem_key else colors['accent_red']}; font-size: 13px;"
         )
         api_layout.addWidget(mem_status)
 
@@ -1218,7 +1274,7 @@ class MainWindow(QMainWindow):
             QGroupBox {
                 font-size: 16px;
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid {colors['border']};
                 border-radius: 8px;
                 margin-top: 10px;
                 padding: 15px;
@@ -1334,7 +1390,7 @@ class MainWindow(QMainWindow):
                 margin-top: 15px;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         storage_mgmt_btn.clicked.connect(self._on_manage_cloud_storage)
@@ -1349,7 +1405,13 @@ class MainWindow(QMainWindow):
 
         # Auto-refresh camera list on startup to detect available cameras
         # This ensures we never use -1 (auto-detect) and always have real camera indices
-        QTimer.singleShot(500, self._refresh_camera_list_silent)
+        # Only do this ONCE on first creation, not on theme changes
+        if not self._cameras_initialized:
+            QTimer.singleShot(500, self._refresh_camera_list_silent)
+            self._cameras_initialized = True
+            logger.info("Camera auto-detect scheduled (first time only)")
+        else:
+            logger.info("Skipping camera auto-detect (already initialized)")
 
         return scroll_area
     
@@ -1374,9 +1436,9 @@ class MainWindow(QMainWindow):
             "Changes take effect immediately for new operations."
         )
         colors = self._get_colors()
-        warning_bg = '#FFF3CD' if not self.dark_mode else '#3A3420'
-        warning_text = '#856404' if not self.dark_mode else '#FFD700'
-        warning_border = '#FFC107' if not self.dark_mode else '#B8860B'
+        warning_bg = colors['warning_bg']
+        warning_text = colors['warning_text']
+        warning_border = colors['accent_yellow']
         warning_label.setStyleSheet(f"""
             QLabel {{
                 background-color: {warning_bg};
@@ -1450,6 +1512,7 @@ class MainWindow(QMainWindow):
     def _toggle_developer_mode(self, state):
         """Toggle developer options tab visibility."""
         enabled = (state == Qt.CheckState.Checked.value)
+        self._developer_mode_enabled = enabled  # Track state for technical details button
         self.settings_tabs.setTabEnabled(1, enabled)
         
         if enabled:
@@ -1458,6 +1521,10 @@ class MainWindow(QMainWindow):
         else:
             self.settings_tabs.setCurrentIndex(0)  # Switch back to general
             logger.info("Developer options disabled")
+        
+        # Refresh reports tab to show/hide technical details buttons
+        if hasattr(self, 'reports_tab'):
+            self._load_sessions_list()
     
     def _create_label_profiles_section(self) -> QWidget:
         """Create label profiles editor section."""
@@ -1610,6 +1677,15 @@ class MainWindow(QMainWindow):
         
         edit_cam_label_btn = QPushButton("Edit Selected")
         edit_cam_label_btn.clicked.connect(lambda: self._on_edit_label("cam"))
+        edit_cam_label_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_orange']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+        """)
         cam_btn_layout.addWidget(edit_cam_label_btn)
         
         remove_cam_label_btn = QPushButton("Remove Selected")
@@ -1674,6 +1750,15 @@ class MainWindow(QMainWindow):
         
         edit_screen_label_btn = QPushButton("Edit Selected")
         edit_screen_label_btn.clicked.connect(lambda: self._on_edit_label("screen"))
+        edit_screen_label_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_orange']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+        """)
         screen_btn_layout.addWidget(edit_screen_label_btn)
         
         remove_screen_label_btn = QPushButton("Remove Selected")
@@ -1813,6 +1898,17 @@ class MainWindow(QMainWindow):
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+        """)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
@@ -2019,23 +2115,32 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
         
+        # Style the form labels
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        
         # Label name
+        name_label = QLabel("Label Name:")
+        name_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
         name_input = QLineEdit()
         if current_label:
             name_input.setText(current_label.name)
             name_input.setReadOnly(True)  # Can't change name when editing
         else:
             name_input.setPlaceholderText("e.g., HeadAway, StandingUp, VideoOnScreen")
-        form.addRow("Label Name:", name_input)
+        form.addRow(name_label, name_input)
         
         # Category
+        category_label = QLabel("Category:")
+        category_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
         category_combo = QComboBox()
         category_combo.addItems(["distraction", "focus", "absence", "borderline", "neutral"])
         if current_label:
             category_combo.setCurrentText(current_label.category)
-        form.addRow("Category:", category_combo)
+        form.addRow(category_label, category_combo)
         
         # Threshold
+        threshold_label = QLabel("Confidence Threshold:")
+        threshold_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
         threshold_spin = QDoubleSpinBox()
         threshold_spin.setRange(0.0, 1.0)
         threshold_spin.setSingleStep(0.05)
@@ -2044,16 +2149,18 @@ class MainWindow(QMainWindow):
             threshold_spin.setValue(current_label.threshold)
         else:
             threshold_spin.setValue(0.70)
-        form.addRow("Confidence Threshold:", threshold_spin)
+        form.addRow(threshold_label, threshold_spin)
         
         # Description
+        desc_label = QLabel("Description:")
+        desc_label.setStyleSheet(f"color: {colors['text_primary']}; font-weight: 600;")
         desc_input = QTextEdit()
         desc_input.setMaximumHeight(80)
         if current_label:
             desc_input.setPlainText(current_label.description)
         else:
             desc_input.setPlaceholderText("Describe what this label detects...")
-        form.addRow("Description:", desc_input)
+        form.addRow(desc_label, desc_input)
         
         layout.addLayout(form)
         
@@ -2071,6 +2178,17 @@ class MainWindow(QMainWindow):
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+        """)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
@@ -3257,24 +3375,26 @@ Return as markdown with clear sections and formatting."""
             # Update progress bar with color coding
             self.focus_progress_bar.setValue(int(focus_ratio))
             
-            # Change progress bar color based on focus ratio
+            # Change progress bar color based on focus ratio (Apple semantic colors)
+            colors = self._get_colors()
+            
             if focus_ratio >= 80:
-                color = "#27ae60"  # Green - excellent
+                color = colors['accent_green']  # Excellent
             elif focus_ratio >= 60:
-                color = "#f39c12"  # Orange - good
+                color = colors['accent_orange']  # Good
             else:
-                color = "#e74c3c"  # Red - needs improvement
+                color = colors['accent_red']  # Needs improvement
             
             self.focus_progress_bar.setStyleSheet(f"""
                 QProgressBar {{
-                    border: 1px solid #bdc3c7;
+                    border: none;
                     border-radius: 4px;
-                    height: 20px;
-                    background-color: #ecf0f1;
+                    height: 8px;
+                    background-color: {colors['bg_tertiary']};
                 }}
                 QProgressBar::chunk {{
                     background-color: {color};
-                    border-radius: 3px;
+                    border-radius: 4px;
                 }}
             """)
             
@@ -6076,7 +6196,7 @@ Historical Trends, Snapshot Analysis</p>
                 upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 upload_btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: #AF52DE;
+                        background-color: {colors['accent_purple']};
                         color: white;
                         border: none;
                         border-radius: 8px;
@@ -6085,7 +6205,7 @@ Historical Trends, Snapshot Analysis</p>
                         font-weight: 600;
                     }}
                     QPushButton:hover {{
-                        background-color: #9F42CE;
+                        opacity: 0.85;
                     }}
                     QPushButton:disabled {{
                         background-color: {colors['text_tertiary']};
@@ -6151,7 +6271,7 @@ Historical Trends, Snapshot Analysis</p>
                             font-weight: 600;
                         }}
                         QPushButton:hover {{
-                            background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                            opacity: 0.85;
                         }}
                         QPushButton:disabled {{
                             background-color: {colors['text_tertiary']};
@@ -6213,7 +6333,7 @@ Historical Trends, Snapshot Analysis</p>
                             font-weight: 600;
                         }}
                         QPushButton:hover {{
-                            background-color: #30B350;
+                            opacity: 0.85;
                         }}
                     """)
                     details_btn.clicked.connect(lambda checked, jid=job.job_id: self._on_show_cloud_details(jid))
@@ -6249,7 +6369,7 @@ Historical Trends, Snapshot Analysis</p>
                         font-weight: 600;
                     }}
                     QPushButton:hover {{
-                        background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                        opacity: 0.85;
                     }}
                     QPushButton:disabled {{
                         background-color: {colors['text_tertiary']};
@@ -6271,7 +6391,7 @@ Historical Trends, Snapshot Analysis</p>
                 regen_memories_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 regen_memories_btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: #AF52DE;
+                        background-color: {colors['accent_purple']};
                         color: white;
                         border: none;
                         border-radius: 6px;
@@ -6280,7 +6400,7 @@ Historical Trends, Snapshot Analysis</p>
                         font-weight: 600;
                     }}
                     QPushButton:hover {{
-                        background-color: #9F42CE;
+                        opacity: 0.85;
                     }}
                     QPushButton:disabled {{
                         background-color: {colors['text_tertiary']};
@@ -6337,7 +6457,7 @@ Historical Trends, Snapshot Analysis</p>
                 view_comprehensive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 view_comprehensive_btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: #AF52DE;
+                        background-color: {colors['accent_purple']};
                         color: white;
                         border: none;
                         border-radius: 8px;
@@ -6346,7 +6466,7 @@ Historical Trends, Snapshot Analysis</p>
                         font-weight: 600;
                     }}
                     QPushButton:hover {{
-                        background-color: #9F42CE;
+                        opacity: 0.85;
                     }}
                 """)
                 view_comprehensive_btn.setToolTip("View full AI-generated report with historical trends")
@@ -6397,7 +6517,7 @@ Historical Trends, Snapshot Analysis</p>
             view_summary_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             view_summary_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: #AF52DE;
+                    background-color: {colors['accent_purple']};
                     color: white;
                     border: none;
                     border-radius: 8px;
@@ -6406,7 +6526,7 @@ Historical Trends, Snapshot Analysis</p>
                     font-weight: 600;
                 }}
                 QPushButton:hover {{
-                    background-color: #9F42CE;
+                    opacity: 0.85;
                 }}
             """)
             view_summary_btn.setToolTip("View AI-generated session summary")
@@ -6428,7 +6548,7 @@ Historical Trends, Snapshot Analysis</p>
                 font-weight: 600;
             }}
             QPushButton:hover {{
-                background-color: {'#0066CC' if not self.dark_mode else '#0F8FFF'};
+                opacity: 0.85;
             }}
         """)
         show_files_btn.clicked.connect(lambda: self._on_show_files(session.session_id))
@@ -6454,6 +6574,29 @@ Historical Trends, Snapshot Analysis</p>
         """)
         delete_btn.clicked.connect(lambda: self._on_delete_session(session.session_id))
         action_layout.addWidget(delete_btn)
+        
+        # Technical Details button (developer only)
+        if self._developer_mode_enabled:
+            tech_details_btn = QPushButton("🔬 Technical Details")
+            tech_details_btn.setMinimumHeight(32)
+            tech_details_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            tech_details_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {colors['accent_purple']};
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 6px 14px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    opacity: 0.85;
+                }}
+            """)
+            tech_details_btn.setToolTip("View raw snapshot data, AI responses, and voting engine details")
+            tech_details_btn.clicked.connect(lambda: self._on_show_technical_details(session.session_id))
+            action_layout.addWidget(tech_details_btn)
 
         action_layout.addStretch()
 
@@ -6462,6 +6605,462 @@ Historical Trends, Snapshot Analysis</p>
 
         return card
 
+    def _on_show_technical_details(self, session_id: str):
+        """Show technical snapshot details dialog with camera and screen tabs."""
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QTabWidget, QTableWidget, QTableWidgetItem,
+            QHeaderView, QDialogButtonBox, QLabel
+        )
+        from pathlib import Path
+        
+        # Get session and snapshots
+        session = self.database.get_session(session_id)
+        if not session:
+            QMessageBox.critical(self, "Error", "Session not found")
+            return
+        
+        snapshots = self.database.get_snapshots_for_session(session_id)
+        
+        if not snapshots:
+            QMessageBox.information(
+                self,
+                "No Snapshots",
+                f"No snapshots found for session '{session.task_name}'"
+            )
+            return
+        
+        colors = self._get_colors()
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"🔬 Technical Snapshot Details - {session.task_name}")
+        dialog.setMinimumSize(1000, 700)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Info header
+        info_label = QLabel(
+            f"Session: {session.task_name} | "
+            f"Profile: {session.label_profile_name} | "
+            f"Total Snapshots: {len(snapshots)}"
+        )
+        info_label.setStyleSheet(f"color: {colors['text_secondary']}; margin-bottom: 10px;")
+        layout.addWidget(info_label)
+        
+        # Create tab widget
+        tabs = QTabWidget()
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+                background-color: {colors['card_bg']};
+            }}
+            QTabBar::tab {{
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_secondary']};
+                padding: 10px 20px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                margin-right: 2px;
+            }}
+            QTabBar::tab:selected {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                font-weight: 600;
+            }}
+        """)
+        
+        # Camera snapshots tab
+        cam_table = self._create_snapshot_table(snapshots, "cam", session_id)
+        tabs.addTab(cam_table, "📷 Camera Snapshots")
+        
+        # Screen snapshots tab
+        screen_table = self._create_snapshot_table(snapshots, "screen", session_id)
+        tabs.addTab(screen_table, "🖥️ Screen Snapshots")
+        
+        layout.addWidget(tabs)
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+        """)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+    
+    def _create_snapshot_table(self, all_snapshots, kind: str, session_id: str):
+        """Create snapshot table for specific kind (cam or screen)."""
+        from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView
+        from PyQt6.QtCore import Qt
+        
+        # Filter snapshots by kind
+        snapshots = [s for s in all_snapshots if kind in s.jpeg_path.lower()]
+        
+        colors = self._get_colors()
+        
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        table = QTableWidget()
+        table.setColumnCount(6)
+        table.setHorizontalHeaderLabels([
+            "Timestamp", "Filename", "Top Label", "Confidence", "Status", "Label Count"
+        ])
+        table.setRowCount(len(snapshots))
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        table.setSortingEnabled(True)
+        table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                gridline-color: {colors['border']};
+                alternate-background-color: {colors['bg_tertiary']};
+            }}
+            QTableWidget::item {{
+                padding: 8px;
+            }}
+            QHeaderView::section {{
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_primary']};
+                padding: 8px;
+                border: none;
+                font-weight: 600;
+            }}
+        """)
+        table.setAlternatingRowColors(True)
+        
+        # Configure column widths
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        
+        # Populate table
+        for row_idx, snapshot in enumerate(snapshots):
+            # Timestamp
+            time_str = snapshot.timestamp.strftime("%H:%M:%S") if snapshot.timestamp else "N/A"
+            table.setItem(row_idx, 0, QTableWidgetItem(time_str))
+            
+            # Filename
+            from pathlib import Path
+            filename = Path(snapshot.jpeg_path).name
+            table.setItem(row_idx, 1, QTableWidgetItem(filename))
+            
+            # Top label and confidence
+            if snapshot.vision_labels:
+                # Get label with highest confidence
+                top_label = max(snapshot.vision_labels.items(), key=lambda x: x[1])
+                table.setItem(row_idx, 2, QTableWidgetItem(top_label[0]))
+                table.setItem(row_idx, 3, QTableWidgetItem(f"{top_label[1]:.0%}"))
+                table.setItem(row_idx, 5, QTableWidgetItem(str(len(snapshot.vision_labels))))
+            else:
+                table.setItem(row_idx, 2, QTableWidgetItem("Analyzing..."))
+                table.setItem(row_idx, 3, QTableWidgetItem("-"))
+                table.setItem(row_idx, 5, QTableWidgetItem("0"))
+            
+            # Status
+            from ..core.models import UploadStatus
+            status_map = {
+                UploadStatus.PENDING: "⏳ Pending",
+                UploadStatus.UPLOADING: "⬆️ Uploading",
+                UploadStatus.SUCCESS: "✅ Success",
+                UploadStatus.FAILED: "❌ Failed"
+            }
+            status_text = status_map.get(snapshot.upload_status, str(snapshot.upload_status.value))
+            status_item = QTableWidgetItem(status_text)
+            
+            # Color code status
+            if snapshot.upload_status == UploadStatus.SUCCESS:
+                status_item.setForeground(Qt.GlobalColor.darkGreen if not self.dark_mode else Qt.GlobalColor.green)
+            elif snapshot.upload_status == UploadStatus.FAILED:
+                status_item.setForeground(Qt.GlobalColor.red)
+            
+            table.setItem(row_idx, 4, status_item)
+            
+            # Store snapshot object in row for later retrieval
+            table.item(row_idx, 0).setData(Qt.ItemDataRole.UserRole, snapshot)
+        
+        # Double-click to open detail viewer
+        table.doubleClicked.connect(lambda: self._on_table_row_double_clicked(table))
+        
+        layout.addWidget(table)
+        
+        # Instructions
+        hint_label = QLabel("💡 Double-click any row to view detailed analysis")
+        hint_label.setStyleSheet(f"color: {colors['text_secondary']}; font-style: italic; margin-top: 8px;")
+        layout.addWidget(hint_label)
+        
+        return widget
+    
+    def _on_table_row_double_clicked(self, table):
+        """Handle double-click on snapshot table row."""
+        current_row = table.currentRow()
+        if current_row < 0:
+            return
+        
+        # Get snapshot from stored data
+        snapshot = table.item(current_row, 0).data(Qt.ItemDataRole.UserRole)
+        if snapshot:
+            self._show_snapshot_detail_viewer(snapshot)
+    
+    def _show_snapshot_detail_viewer(self, snapshot):
+        """Show detailed view of single snapshot with image, JSON, and voting info."""
+        from PyQt6.QtWidgets import (
+            QDialog, QHBoxLayout, QVBoxLayout, QLabel, QTextEdit,
+            QDialogButtonBox, QSplitter
+        )
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QPixmap
+        from pathlib import Path
+        import json
+        
+        colors = self._get_colors()
+        
+        # Create dialog
+        dialog = QDialog(self)
+        filename = Path(snapshot.jpeg_path).name
+        dialog.setWindowTitle(f"Snapshot Detail: {filename}")
+        dialog.setMinimumSize(1200, 700)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {colors['bg_primary']};
+            }}
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Main content splitter (image | details)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # LEFT PANEL: Image Preview
+        image_widget = QWidget()
+        image_layout = QVBoxLayout(image_widget)
+        
+        image_label_header = QLabel("📸 Snapshot Preview")
+        image_label_header.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']}; margin-bottom: 8px;")
+        image_layout.addWidget(image_label_header)
+        
+        image_display = QLabel()
+        image_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        image_display.setStyleSheet(f"""
+            QLabel {{
+                background-color: {colors['bg_secondary']};
+                border: 2px solid {colors['border']};
+                border-radius: 8px;
+                padding: 10px;
+            }}
+        """)
+        image_display.setMinimumSize(400, 300)
+        
+        # Load and display image
+        try:
+            jpeg_path = Path(snapshot.jpeg_path)
+            if jpeg_path.exists():
+                pixmap = QPixmap(str(jpeg_path))
+                # Scale to fit while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaled(
+                    400, 400,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                image_display.setPixmap(scaled_pixmap)
+            else:
+                image_display.setText("❌ Image file not found")
+                image_display.setStyleSheet(f"""
+                    QLabel {{
+                        color: {colors['accent_red']};
+                        background-color: {colors['bg_secondary']};
+                        border: 2px dashed {colors['border']};
+                        border-radius: 8px;
+                    }}
+                """)
+        except Exception as e:
+            logger.error(f"Failed to load image: {e}")
+            image_display.setText(f"❌ Failed to load image\n{str(e)}")
+        
+        image_layout.addWidget(image_display)
+        image_layout.addStretch()
+        
+        splitter.addWidget(image_widget)
+        
+        # RIGHT PANEL: Details (split into JSON and Voting)
+        details_widget = QWidget()
+        details_layout = QVBoxLayout(details_widget)
+        
+        # Top: Raw JSON Response
+        json_label = QLabel("🔍 Raw AI Response")
+        json_label.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']}; margin-bottom: 8px;")
+        details_layout.addWidget(json_label)
+        
+        json_display = QTextEdit()
+        json_display.setReadOnly(True)
+        json_display.setStyleSheet(f"""
+            QTextEdit {{
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
+                background-color: {colors['card_bg']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+                padding: 10px;
+            }}
+        """)
+        
+        # Load vision JSON
+        try:
+            if snapshot.vision_json_path:
+                vision_file = self.config.get_data_dir() / snapshot.vision_json_path
+                if vision_file.exists():
+                    with open(vision_file, 'r') as f:
+                        vision_data = json.load(f)
+                    json_display.setPlainText(json.dumps(vision_data, indent=2))
+                else:
+                    json_display.setPlainText("Vision JSON file not found")
+            else:
+                json_display.setPlainText("Not yet analyzed - no vision data available")
+        except Exception as e:
+            logger.error(f"Failed to load vision JSON: {e}")
+            json_display.setPlainText(f"Error loading JSON: {str(e)}")
+        
+        details_layout.addWidget(json_display)
+        
+        # Bottom: Voting Engine Interpretation
+        voting_label = QLabel("⚙️ Voting Engine Interpretation")
+        voting_label.setStyleSheet(f"font-weight: 600; color: {colors['text_primary']}; margin-top: 12px; margin-bottom: 8px;")
+        details_layout.addWidget(voting_label)
+        
+        voting_display = QTextEdit()
+        voting_display.setReadOnly(True)
+        voting_display.setMaximumHeight(200)
+        voting_display.setStyleSheet(f"""
+            QTextEdit {{
+                font-size: 12px;
+                background-color: {colors['bg_tertiary']};
+                color: {colors['text_primary']};
+                border: 1px solid {colors['border']};
+                border-radius: 4px;
+                padding: 10px;
+            }}
+        """)
+        
+        # Get voting interpretation
+        interpretation = self._get_voting_interpretation(snapshot)
+        voting_display.setPlainText(interpretation)
+        
+        details_layout.addWidget(voting_display)
+        
+        splitter.addWidget(details_widget)
+        
+        # Set splitter proportions (40% image, 60% details)
+        splitter.setSizes([400, 600])
+        
+        layout.addWidget(splitter)
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {colors['accent_blue']};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: 600;
+                min-width: 80px;
+            }}
+        """)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+    
+    def _get_voting_interpretation(self, snapshot) -> str:
+        """Generate voting engine interpretation for snapshot."""
+        lines = []
+        lines.append(f"Snapshot ID: {snapshot.snapshot_id}")
+        lines.append(f"Timestamp: {snapshot.timestamp.strftime('%Y-%m-%d %H:%M:%S') if snapshot.timestamp else 'N/A'}")
+        lines.append(f"Kind: {'Camera' if 'cam' in snapshot.jpeg_path else 'Screen'}")
+        lines.append("")
+        
+        if snapshot.vision_labels:
+            lines.append("DETECTED LABELS:")
+            lines.append("=" * 50)
+            
+            # Try to load profile to show categories
+            try:
+                session = self.database.get_session(snapshot.session_id)
+                if session:
+                    profile_manager = self.config.get_label_profiles_manager()
+                    profile = profile_manager.get_profile(session.label_profile_name)
+                    
+                    # Get label definitions
+                    is_cam = 'cam' in snapshot.jpeg_path.lower()
+                    label_defs = profile.cam_labels if is_cam else profile.screen_labels
+                    
+                    for label_name, confidence in sorted(snapshot.vision_labels.items(), key=lambda x: x[1], reverse=True):
+                        label_def = label_defs.get(label_name)
+                        
+                        if label_def:
+                            threshold = label_def.threshold
+                            category = label_def.category.upper()
+                            passed = "✓ PASSED" if confidence >= threshold else "✗ BELOW THRESHOLD"
+                            
+                            lines.append(f"  • {label_name}: {confidence:.0%}")
+                            lines.append(f"    Category: {category}")
+                            lines.append(f"    Threshold: {threshold:.0%} → {passed}")
+                        else:
+                            # Label not in profile (shouldn't happen but handle gracefully)
+                            lines.append(f"  • {label_name}: {confidence:.0%}")
+                            lines.append(f"    (Not in profile)")
+                        
+                        lines.append("")
+            
+            except Exception as e:
+                logger.error(f"Failed to load profile info: {e}")
+                # Fallback: just show labels
+                for label_name, confidence in sorted(snapshot.vision_labels.items(), key=lambda x: x[1], reverse=True):
+                    lines.append(f"  • {label_name}: {confidence:.0%}")
+            
+            lines.append("")
+            lines.append("VOTING CONTRIBUTION:")
+            lines.append("=" * 50)
+            lines.append("This snapshot was added to the K=3 hysteresis buffer.")
+            lines.append("State transitions occur when ≥2 of 3 snapshots show")
+            lines.append("the same pattern (distraction/focus/absence).")
+            lines.append("")
+            lines.append("Note: Full voting history requires runtime state machine")
+            lines.append("data which is not persisted to database.")
+            
+        else:
+            lines.append("STATUS: Not yet analyzed by Vision API")
+            lines.append("")
+            lines.append(f"Upload Status: {snapshot.upload_status.value}")
+            if snapshot.error_message:
+                lines.append(f"Error: {snapshot.error_message}")
+            lines.append(f"Retry Count: {snapshot.retry_count}")
+        
+        return "\n".join(lines)
+    
     def _format_duration(self, session) -> str:
         """Format session duration."""
         if not session.ended_at:
