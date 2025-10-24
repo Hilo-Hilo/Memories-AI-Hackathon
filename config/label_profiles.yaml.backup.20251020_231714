@@ -1,0 +1,120 @@
+# Label Profile Configuration
+# Defines detection labels for different session types
+# Each session uses one profile for consistent classification
+
+profiles:
+  Default:
+    description: "Standard ADHD distraction detection labels"
+    
+    cam_labels:
+      HeadAway:
+        category: distraction
+        threshold: 0.7
+        description: "Head turned >45° from screen"
+      
+      EyesOffScreen:
+        category: distraction
+        threshold: 0.7
+        description: "Gaze not directed at screen"
+      
+      MicroSleep:
+        category: distraction
+        threshold: 0.7
+        description: "Eyes closed or drowsy appearance"
+      
+      PhoneLikely:
+        category: distraction
+        threshold: 0.75
+        description: "Phone visible in hand or being viewed"
+      
+      Absent:
+        category: absence
+        threshold: 0.8
+        description: "No person visible in frame"
+      
+      Focused:
+        category: focus
+        threshold: 0.6
+        description: "Engaged posture, eyes on screen"
+    
+    screen_labels:
+      VideoOnScreen:
+        category: distraction
+        threshold: 0.7
+        description: "Video player or streaming content (entertainment/distraction)"
+      
+      SocialFeed:
+        category: distraction
+        threshold: 0.75
+        description: "Social media feed scrolling"
+      
+      Games:
+        category: distraction
+        threshold: 0.8
+        description: "Gaming applications or entertainment"
+      
+      ChatWindow:
+        category: distraction
+        threshold: 0.7
+        description: "Chat/messaging applications (personal)"
+      
+      Code:
+        category: focus
+        threshold: 0.7
+        description: "Code editor or IDE"
+      
+      Docs:
+        category: focus
+        threshold: 0.65
+        description: "Documentation, technical reading, wikis"
+      
+      Reading:
+        category: focus
+        threshold: 0.65
+        description: "Long-form reading (ebooks, PDFs, research papers)"
+      
+      Slides:
+        category: focus
+        threshold: 0.7
+        description: "Presentation software"
+      
+      Terminal:
+        category: focus
+        threshold: 0.75
+        description: "Command line terminal or shell"
+      
+      WorkRelatedVideo:
+        category: focus
+        threshold: 0.7
+        description: "Tutorial/educational video with work context"
+      
+      WorkChat:
+        category: focus
+        threshold: 0.7
+        description: "Work-related chat (Slack, Teams)"
+      
+      Email:
+        category: borderline
+        threshold: 0.6
+        description: "Email client (borderline - context-dependent)"
+      
+      VideoCall:
+        category: borderline
+        threshold: 0.7
+        description: "Video conferencing UI (borderline - context-dependent)"
+      
+      MultipleMonitors:
+        category: borderline
+        threshold: 0.6
+        description: "Multiple windows visible (borderline - context switching)"
+      
+      Browser:
+        category: neutral
+        threshold: 0.6
+        description: "Generic browser"
+      
+      Unknown:
+        category: neutral
+        threshold: 0.5
+        description: "Cannot determine content type"
+

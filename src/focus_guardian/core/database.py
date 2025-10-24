@@ -199,11 +199,7 @@ class Database:
                 quality_profile=QualityProfile(row['quality_profile']),
                 screen_enabled=bool(row['screen_enabled']),
                 status=SessionStatus(row['status']),
-<<<<<<< HEAD
-                label_profile_name=row['label_profile_name'] if 'label_profile_name' in row.keys() else 'Default',  # Backwards compatible
-=======
                 label_profile_name=label_profile_name,
->>>>>>> 878a3f76d60b9c6b02de131b95ad1caa4b93e0f8
                 cam_mp4_path=row['cam_mp4_path'],
                 screen_mp4_path=row['screen_mp4_path'],
                 snapshots_dir=row['snapshots_dir'],

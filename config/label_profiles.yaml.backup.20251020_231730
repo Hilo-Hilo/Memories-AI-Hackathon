@@ -102,6 +102,10 @@ profiles:
         category: distraction
         threshold: 0.7
         description: Gaze not directed at screen
+      PhoneLikely:
+        category: distraction
+        threshold: 0.75
+        description: Phone visible in hand or being viewed
       Absent:
         category: absence
         threshold: 0.8
