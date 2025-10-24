@@ -114,7 +114,7 @@ class Config:
 
         # Check for required keys and validate their types/values
         required_validations = {
-            "snapshot_interval_sec": lambda x: isinstance(x, int) and 10 <= x <= 300,
+            "snapshot_interval_sec": lambda x: isinstance(x, int) and 3 <= x <= 300,
             "video_bitrate_kbps_cam": lambda x: isinstance(x, int) and 100 <= x <= 5000,
             "video_bitrate_kbps_screen": lambda x: isinstance(x, int) and 100 <= x <= 10000,
             "video_res_profile": lambda x: x in ["Low", "Std", "High"],
@@ -342,9 +342,9 @@ class Config:
     # ========================================================================
     
     def get_snapshot_interval_sec(self) -> int:
-        """Get snapshot interval in seconds (default: 60, min: 10)."""
+        """Get snapshot interval in seconds (default: 60, min: 3)."""
         value = self._get_config_value("snapshot_interval_sec", 60)
-        return max(10, int(value))  # Enforce minimum of 10 seconds
+        return max(3, int(value))  # Enforce minimum of 3 seconds
     
     def get_video_bitrate_kbps_cam(self) -> int:
         """Get camera video bitrate in kbps."""

@@ -148,7 +148,7 @@ class Database:
             quality_profile=QualityProfile(row['quality_profile']),
             screen_enabled=bool(row['screen_enabled']),
             status=SessionStatus(row['status']),
-            label_profile_name=row.get('label_profile_name', 'Default'),  # Backwards compatible
+            label_profile_name=row['label_profile_name'] if 'label_profile_name' in row.keys() else 'Default',  # Backwards compatible
             cam_mp4_path=row['cam_mp4_path'],
             screen_mp4_path=row['screen_mp4_path'],
             snapshots_dir=row['snapshots_dir'],
@@ -187,7 +187,7 @@ class Database:
                 quality_profile=QualityProfile(row['quality_profile']),
                 screen_enabled=bool(row['screen_enabled']),
                 status=SessionStatus(row['status']),
-                label_profile_name=row.get('label_profile_name', 'Default'),  # Backwards compatible
+                label_profile_name=row['label_profile_name'] if 'label_profile_name' in row.keys() else 'Default',  # Backwards compatible
                 cam_mp4_path=row['cam_mp4_path'],
                 screen_mp4_path=row['screen_mp4_path'],
                 snapshots_dir=row['snapshots_dir'],
