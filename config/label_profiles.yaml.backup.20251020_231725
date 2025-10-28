@@ -102,6 +102,14 @@ profiles:
         category: distraction
         threshold: 0.7
         description: Gaze not directed at screen
+      MicroSleep:
+        category: distraction
+        threshold: 0.7
+        description: Eyes closed or drowsy appearance
+      PhoneLikely:
+        category: distraction
+        threshold: 0.75
+        description: Phone visible in hand or being viewed
       Absent:
         category: absence
         threshold: 0.8
