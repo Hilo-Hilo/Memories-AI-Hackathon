@@ -25,6 +25,7 @@ from ..integrations.hume_client import HumeExpressionClient
 from ..integrations.memories_client import MemoriesClient
 from ..session.report_generator import ReportGenerator
 from ..session.cloud_analysis_manager import CloudAnalysisManager
+from ..ai.focus_duration_analyzer import FocusDurationAnalyzer
 from ..utils.queue_manager import QueueManager
 from ..utils.logger import get_logger
 
@@ -67,9 +68,19 @@ class SessionManager:
         self.memories_client: Optional[MemoriesClient] = None
         self.report_generator: Optional[ReportGenerator] = None
         self.cloud_analysis_manager: Optional[CloudAnalysisManager] = None
+        self.focus_analyzer: Optional[FocusDurationAnalyzer] = None
 
         # Initialize post-processing clients if API keys available
         self._initialize_post_processing_clients()
+        
+        # Initialize focus duration analyzer
+        if self.config.is_focus_analyzer_enabled():
+            self.focus_analyzer = FocusDurationAnalyzer(
+                database=self.database,
+                min_sessions=self.config.get_focus_analyzer_min_sessions(),
+                lookback_days=self.config.get_focus_analyzer_lookback_days(),
+                recommendation_factor=self.config.get_focus_analyzer_recommendation_factor()
+            )
 
         logger.info("Session manager initialized")
     
@@ -170,6 +181,69 @@ class SessionManager:
         
         logger.info(f"Session started successfully: {session_id}")
         return session_id
+
+    # ------------------------------------------------------------------
+    # Agentic: handle UI queue messages for consecutive distractions
+    # ------------------------------------------------------------------
+    def _process_ui_messages(self) -> None:
+        """Non-blocking drain of UI queue for agent triggers and alerts."""
+        if not self.queue_manager:
+            return
+        try:
+            from queue import Empty
+            while True:
+                msg = self.queue_manager.ui_queue.get_nowait()
+                if not msg:
+                    break
+                mtype = msg.get("type")
+                logger.info(f"Processing UI message: {mtype}")
+                if mtype == "agent_consecutive_distractions":
+                    logger.info("Triggering agent close app feature")
+                    self._handle_agent_consecutive()
+        except Empty:
+            pass  # Queue is empty, which is normal
+        except Exception as e:
+            logger.error(f"Error processing UI messages: {e}")
+
+    def _handle_agent_consecutive(self) -> None:
+        if not self.config.get_agent_close_app_enabled():
+            logger.info("Agent close app is disabled")
+            return
+        
+        # Check permissions first
+        from ..utils import app_control
+        try:
+            has_permissions = app_control.check_accessibility_permissions()
+            if not has_permissions:
+                logger.error(
+                    "macOS Accessibility permissions required for app-close feature! "
+                    "Please grant permissions: System Settings > Privacy & Security > Accessibility > Focus Guardian"
+                )
+                # Notify UI if possible
+                if self.ui_queue:
+                    try:
+                        self.ui_queue.put({
+                            "type": "agent_permissions_needed",
+                            "message": "Accessibility permissions required for app-close feature"
+                        }, block=False)
+                    except Exception:
+                        pass
+                return
+            
+            front = app_control.get_frontmost_app()
+            if not front:
+                logger.warning("Could not get frontmost app - may need Accessibility permissions")
+                return
+            name = front[0]
+            logger.info(f"Closing frontmost app: {name}")
+            # Close immediately (no countdown) per user request
+            result = app_control.quit_app(name)
+            if result:
+                logger.info(f"Agentic close issued for frontmost app: {name}")
+            else:
+                logger.warning(f"Failed to close app: {name}")
+        except Exception as e:
+            logger.error(f"Agent close failed: {e}")
     
     def _initialize_components(
         self,
@@ -569,6 +643,9 @@ class SessionManager:
         if not self.current_session_id:
             return
         
+        # Process UI queue messages (e.g., agent events)
+        self._process_ui_messages()
+        
         # Get stats from components
         total_snapshots = 0
         uploaded_snapshots = 0
@@ -595,6 +672,18 @@ class SessionManager:
             failed_snapshots=failed_snapshots,
             total_events=total_events
         )
+    
+    def get_focus_duration_recommendation(self) -> Optional[dict]:
+        """
+        Get focus duration recommendation based on historical data.
+        
+        Returns:
+            Dictionary with recommendation or None if unavailable
+        """
+        if not self.focus_analyzer:
+            return None
+        
+        return self.focus_analyzer.analyze_and_recommend()
     
     def is_session_active(self) -> bool:
         """Check if a session is currently active."""

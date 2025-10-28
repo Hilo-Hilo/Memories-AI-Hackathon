@@ -13,5 +13,15 @@
   "hume_ai_enabled": false,
   "memories_ai_enabled": false,
   "hume_ai_auto_upload": false,
-  "memories_ai_auto_upload": false
+  "memories_ai_auto_upload": false,
+  "agent_close_app_enabled": false,
+  "agent_close_app_consecutive_distractions": 2,
+  "agent_close_app_window_sec": 60,
+  "agent_close_scope": "frontmost",
+  "agent_close_blocklist": [],
+  "agent_close_prompt_countdown_sec": 0,
+  "focus_analyzer_enabled": true,
+  "focus_analyzer_min_sessions": 3,
+  "focus_analyzer_lookback_days": 30,
+  "focus_analyzer_recommendation_factor": 0.75
 }

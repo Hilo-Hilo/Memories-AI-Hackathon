@@ -30,7 +30,7 @@ class DistractionDetector:
         ui_queue: Queue,
         database: Database,
         session_id: str,
-        alert_threshold_minutes: float = 0.5  # Min duration to trigger alert
+        alert_threshold_minutes: float = 0.167  # Min duration to trigger alert (10 seconds)
     ):
         """
         Initialize distraction detector.
@@ -55,6 +55,9 @@ class DistractionDetector:
         
         # Track recent alerts (for micro-break suggestions)
         self._recent_alerts: deque = deque(maxlen=20)  # Last 20 alerts
+
+        # Track confirmed distraction end times to detect consecutive events
+        self._recent_distraction_end_times: deque = deque(maxlen=10)
         
         # Thread control
         self._running = False
@@ -227,6 +230,13 @@ class DistractionDetector:
                 evidence=self._current_distraction_evidence,
                 confidence=transition.confidence
             )
+
+            # Track for consecutive-distraction agentic trigger
+            try:
+                self._recent_distraction_end_times.append(transition.timestamp)
+                self._check_consecutive_distractions()
+            except Exception as e:
+                logger.warning(f"Failed consecutive-distraction tracking: {e}")
         else:
             logger.info(
                 f"⏭️  Distraction too brief ({duration_minutes:.2f} min < "
@@ -309,6 +319,37 @@ class DistractionDetector:
             "type": distraction_type,
             "duration": duration_seconds
         })
+
+    def _check_consecutive_distractions(self) -> None:
+        """If two (or more) distractions occur within configured window, notify UI."""
+        try:
+            # Fetch dynamic settings from database/config if available via UI queue
+            # For simplicity, send UI a simple event and let SessionManager decide action.
+            if len(self._recent_distraction_end_times) < 2:
+                logger.debug(f"Not enough distractions yet: {len(self._recent_distraction_end_times)}")
+                return
+
+            # Compute window of last two
+            last = self._recent_distraction_end_times[-1]
+            prev = self._recent_distraction_end_times[-2]
+            window_sec = 60  # SessionManager will enforce exact threshold from config
+            delta = (last - prev).total_seconds()
+            logger.debug(f"Checking consecutive distractions: delta={delta:.1f}s, window={window_sec}s")
+            
+            if delta <= window_sec:
+                try:
+                    self.ui_queue.put({
+                        "type": "agent_consecutive_distractions",
+                        "at": last.isoformat(),
+                        "delta_sec": delta
+                    }, block=False)
+                    logger.info(f"Agent trigger: two distractions within {delta:.1f}s")
+                except Exception as e:
+                    logger.error(f"Failed to send agent trigger: {e}")
+            else:
+                logger.debug(f"Distractions too far apart: {delta:.1f}s > {window_sec}s")
+        except Exception as e:
+            logger.error(f"Error in _check_consecutive_distractions: {e}")
     
     def _classify_distraction_type(self, evidence: Dict) -> DistractionType:
         """Classify distraction type from evidence."""

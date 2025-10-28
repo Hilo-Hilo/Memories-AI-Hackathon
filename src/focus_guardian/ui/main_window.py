@@ -28,6 +28,7 @@ from ..utils.logger import get_logger
 from ..ai.summary_generator import AISummaryGenerator
 from ..ai.emotion_aware_messaging import EmotionAwareMessenger, EmotionState
 from ..ai.comprehensive_report_generator import ComprehensiveReportGenerator
+from .themes import ModernDarkTheme, FadeAnimation, SlideAnimation, PulseAnimation
 
 logger = get_logger(__name__)
 
@@ -52,8 +53,8 @@ class MainWindow(QMainWindow):
         self.config = config
         self.database = database
         
-        # Theme mode (light/dark)
-        self.dark_mode = False
+        # Theme mode (light/dark) - Default to dark mode
+        self.dark_mode = True
         
         # Create UI queue for receiving messages from background threads
         from queue import Queue
@@ -126,93 +127,33 @@ class MainWindow(QMainWindow):
                 logger.warning(f"Failed to initialize AI generators: {e}")
         
         logger.info("Main window initialized")
+        
+        # Load and display focus duration recommendation
+        self._update_focus_recommendation()
+    
+    def _update_focus_recommendation(self):
+        """Update the focus duration recommendation display."""
+        if not self.session_manager:
+            return
+        
+        try:
+            recommendation = self.session_manager.get_focus_duration_recommendation()
+            
+            if recommendation:
+                minutes = recommendation['recommended_duration_minutes']
+                message = recommendation['message']
+                self.focus_recommendation_label.setText(f"💡 {message}")
+                self.focus_recommendation_label.setVisible(True)
+            else:
+                self.focus_recommendation_label.setVisible(False)
+                
+        except Exception as e:
+            logger.debug(f"Could not load focus recommendation: {e}")
+            self.focus_recommendation_label.setVisible(False)
     
     def _get_colors(self):
-        """Get Apple-native color palette based on current theme mode."""
-        if self.dark_mode:
-            return {
-                # Backgrounds (Apple Dark Mode)
-                'bg_primary': '#1C1C1E',        # System background
-                'bg_secondary': '#2C2C2E',      # Secondary background
-                'bg_tertiary': '#3A3A3C',       # Tertiary background
-                'card_bg': '#2C2C2E',           # Card/elevated surfaces
-                'grouped_bg': '#1C1C1E',        # Grouped lists background
-                
-                # Accent Colors (Apple System Colors - Dark Mode)
-                'accent_blue': '#0A84FF',       # Primary actions
-                'accent_green': '#30D158',      # Success, positive
-                'accent_orange': '#FF9F0A',     # Warnings
-                'accent_red': '#FF453A',        # Destructive, errors
-                'accent_purple': '#BF5AF2',     # Premium features (dark mode adjusted)
-                'accent_indigo': '#5E5CE6',     # Alternative accent
-                'accent_teal': '#64D2FF',       # Info, alternative
-                'accent_pink': '#FF375F',       # Special highlights
-                'accent_yellow': '#FFD60A',     # Attention
-                
-                # Text (Apple Typography - Dark Mode)
-                'text_primary': '#FFFFFF',      # Primary text
-                'text_secondary': '#98989D',    # Secondary text
-                'text_tertiary': '#636366',     # Tertiary/disabled text
-                
-                # Borders & Separators
-                'border': '#48484A',            # Standard borders
-                'separator': '#38383A',         # Separator lines
-                
-                # Interaction States
-                'hover_bg': 'rgba(10, 132, 255, 0.15)',
-                'selection_bg': 'rgba(10, 132, 255, 0.25)',
-                'shadow': 'rgba(0, 0, 0, 0.6)',
-                
-                # Semantic Backgrounds
-                'warning_bg': '#3A3420',
-                'warning_text': '#FFD60A',
-                'success_bg': '#1E3A2E',
-                'success_text': '#30D158',
-                'error_bg': '#3A1F1F',
-                'error_text': '#FF453A',
-            }
-        else:
-            return {
-                # Backgrounds (Apple Light Mode)
-                'bg_primary': '#F5F5F7',        # System background (light gray)
-                'bg_secondary': '#FFFFFF',      # Secondary background (white)
-                'bg_tertiary': '#FAFAFA',       # Tertiary background
-                'card_bg': '#FFFFFF',           # Card/elevated surfaces (white)
-                'grouped_bg': '#F2F2F7',        # Grouped lists background
-                
-                # Accent Colors (Apple System Colors - Light Mode)
-                'accent_blue': '#007AFF',       # Primary actions
-                'accent_green': '#34C759',      # Success, positive
-                'accent_orange': '#FF9500',     # Warnings
-                'accent_red': '#FF3B30',        # Destructive, errors
-                'accent_purple': '#AF52DE',     # Premium features (App Store purple)
-                'accent_indigo': '#5856D6',     # Alternative accent
-                'accent_teal': '#5AC8FA',       # Info, alternative
-                'accent_pink': '#FF2D55',       # Special highlights
-                'accent_yellow': '#FFCC00',     # Attention
-                
-                # Text (Apple Typography - Light Mode)
-                'text_primary': '#1C1C1E',      # Primary text (almost black)
-                'text_secondary': '#8E8E93',    # Secondary text
-                'text_tertiary': '#AEAEB2',     # Tertiary/disabled text
-                
-                # Borders & Separators
-                'border': '#D1D1D6',            # Standard borders
-                'separator': '#C6C6C8',         # Separator lines
-                
-                # Interaction States
-                'hover_bg': 'rgba(0, 122, 255, 0.08)',
-                'selection_bg': 'rgba(0, 122, 255, 0.15)',
-                'shadow': '0 2px 8px rgba(0, 0, 0, 0.08)',  # Card shadow
-                
-                # Semantic Backgrounds
-                'warning_bg': '#FFF9E6',
-                'warning_text': '#8B6914',
-                'success_bg': '#E8F5E9',
-                'success_text': '#1E7B34',
-                'error_bg': '#FFEAEA',
-                'error_text': '#C41E3A',
-            }
+        """Get modern dark theme palette based on current theme mode."""
+        return ModernDarkTheme.get_colors(self.dark_mode)
     
     def _apply_theme(self):
         """Apply theme to entire application."""
@@ -430,12 +371,16 @@ class MainWindow(QMainWindow):
                     border: none;
                     border-radius: 10px;
                     padding: 12px 24px;
+                    transition: all 0.2s ease;
                 }}
                 QPushButton:hover {{
+                    background-color: {colors['accent_green']};
                     opacity: 0.85;
+                    transform: scale(1.02);
                 }}
                 QPushButton:pressed {{
                     opacity: 0.7;
+                    transform: scale(0.98);
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -455,12 +400,16 @@ class MainWindow(QMainWindow):
                     border: none;
                     border-radius: 10px;
                     padding: 12px 24px;
+                    transition: all 0.2s ease;
                 }}
                 QPushButton:hover {{
+                    background-color: {colors['accent_orange']};
                     opacity: 0.85;
+                    transform: scale(1.02);
                 }}
                 QPushButton:pressed {{
                     opacity: 0.7;
+                    transform: scale(0.98);
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -480,12 +429,16 @@ class MainWindow(QMainWindow):
                     border: none;
                     border-radius: 10px;
                     padding: 12px 24px;
+                    transition: all 0.2s ease;
                 }}
                 QPushButton:hover {{
+                    background-color: {colors['accent_red']};
                     opacity: 0.85;
+                    transform: scale(1.02);
                 }}
                 QPushButton:pressed {{
                     opacity: 0.7;
+                    transform: scale(0.98);
                 }}
                 QPushButton:disabled {{
                     background-color: {colors['bg_tertiary']};
@@ -906,6 +859,20 @@ class MainWindow(QMainWindow):
         """)
         stats_layout.addWidget(self.focus_progress_bar)
         
+        # Focus duration recommendation
+        self.focus_recommendation_label = QLabel("")
+        self.focus_recommendation_label.setWordWrap(True)
+        self.focus_recommendation_label.setStyleSheet(f"""
+            font-size: 13px; 
+            color: {colors['text_secondary']};
+            font-weight: 500;
+            padding: 12px;
+            background-color: {colors['bg_secondary']};
+            border-radius: 8px;
+            border-left: 3px solid {colors['accent_blue']};
+        """)
+        self.focus_recommendation_label.setVisible(False)
+        stats_layout.addWidget(self.focus_recommendation_label)
         
         layout.addWidget(stats_widget)
         
@@ -1398,6 +1365,38 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(cloud_group)
 
+        # Agentic Features section (local-only)
+        agent_group = QGroupBox("Agentic Features (Local)")
+        agent_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid {colors['border']};
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        agent_layout = QVBoxLayout(agent_group)
+
+        self.agent_close_enabled_checkbox = QCheckBox("Close frontmost app after two distractions in a row")
+        self.agent_close_enabled_checkbox.setChecked(self.config.get_agent_close_app_enabled())
+        self.agent_close_enabled_checkbox.setStyleSheet("font-size: 13px; font-weight: normal;")
+        self.agent_close_enabled_checkbox.stateChanged.connect(self._on_agent_close_toggled)
+        agent_layout.addWidget(self.agent_close_enabled_checkbox)
+
+        agent_hint = QLabel("When enabled, Focus Guardian will immediately close the currently frontmost app if two distractions occur back-to-back within a short window. You can disable this at any time.")
+        agent_hint.setWordWrap(True)
+        agent_hint.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px;")
+        agent_layout.addWidget(agent_hint)
+
+        layout.addWidget(agent_group)
+
         layout.addStretch()
 
         # Set the scroll widget as the scroll area's widget
@@ -1414,6 +1413,14 @@ class MainWindow(QMainWindow):
             logger.info("Skipping camera auto-detect (already initialized)")
 
         return scroll_area
+
+    def _on_agent_close_toggled(self, state):
+        enabled = state == Qt.CheckState.Checked
+        # Persist to user config via Config setter
+        try:
+            self.config.set_agent_close_app_enabled(enabled)
+        except Exception as e:
+            self.logger.warning(f"Failed to save agent close app setting: {e}")
     
     def _create_developer_options_widget(self) -> QWidget:
         """Create developer options widget for prompt editing."""
@@ -1478,8 +1485,11 @@ class MainWindow(QMainWindow):
         return scroll_area
     
     def _toggle_theme(self):
-        """Toggle between light and dark mode."""
+        """Toggle between light and dark mode with smooth transition."""
         self.dark_mode = not self.dark_mode
+        
+        # Apply fade animation to main window
+        FadeAnimation.apply_fade_in(self, duration_ms=300)
         
         # Apply new theme
         self._apply_theme()

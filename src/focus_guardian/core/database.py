@@ -199,11 +199,7 @@ class Database:
                 quality_profile=QualityProfile(row['quality_profile']),
                 screen_enabled=bool(row['screen_enabled']),
                 status=SessionStatus(row['status']),
-<<<<<<< HEAD
-                label_profile_name=row['label_profile_name'] if 'label_profile_name' in row.keys() else 'Default',  # Backwards compatible
-=======
                 label_profile_name=label_profile_name,
->>>>>>> 878a3f76d60b9c6b02de131b95ad1caa4b93e0f8
                 cam_mp4_path=row['cam_mp4_path'],
                 screen_mp4_path=row['screen_mp4_path'],
                 snapshots_dir=row['snapshots_dir'],
@@ -468,6 +464,68 @@ class Database:
             ))
         
         return events
+    
+    def get_first_distraction_time(self, session_id: str) -> Optional[float]:
+        """
+        Get seconds until first distraction in a session.
+        
+        Args:
+            session_id: Session ID to analyze
+            
+        Returns:
+            Seconds from session start to first distraction, or None if no distractions
+        """
+        with self._get_connection() as conn:
+            # Get session start time
+            session_row = conn.execute(
+                "SELECT started_at FROM sessions WHERE session_id = ?",
+                (session_id,)
+            ).fetchone()
+            
+            if not session_row:
+                return None
+            
+            session_start = datetime.fromisoformat(session_row['started_at'])
+            
+            # Get first distraction event
+            event_row = conn.execute(
+                "SELECT started_at FROM distraction_events WHERE session_id = ? ORDER BY started_at LIMIT 1",
+                (session_id,)
+            ).fetchone()
+            
+            if not event_row:
+                return None
+            
+            distraction_start = datetime.fromisoformat(event_row['started_at'])
+            
+            # Calculate duration in seconds
+            return (distraction_start - session_start).total_seconds()
+    
+    def get_sessions_with_distractions(self, limit: int = 30) -> List[Session]:
+        """
+        Get completed sessions that have at least one distraction event.
+        
+        Args:
+            limit: Maximum number of sessions to return
+            
+        Returns:
+            List of sessions sorted by most recent first
+        """
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT DISTINCT s.* 
+                FROM sessions s
+                INNER JOIN distraction_events de ON s.session_id = de.session_id
+                WHERE s.status = 'completed'
+                ORDER BY s.started_at DESC
+                LIMIT ?
+            """, (limit,)).fetchall()
+        
+        sessions = []
+        for row in rows:
+            sessions.append(self._row_to_session(row))
+        
+        return sessions
     
     # ========================================================================
     # Report Operations

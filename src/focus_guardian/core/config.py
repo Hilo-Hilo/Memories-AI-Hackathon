@@ -345,6 +345,68 @@ class Config:
         """Get snapshot interval in seconds (default: 60, min: 3)."""
         value = self._get_config_value("snapshot_interval_sec", 60)
         return max(3, int(value))  # Enforce minimum of 3 seconds
+
+    # --------------------------------------------------------------------
+    # Agentic: Close app after consecutive distractions
+    # --------------------------------------------------------------------
+    def get_agent_close_app_enabled(self) -> bool:
+        return bool(self._get_config_value("agent_close_app_enabled", False))
+
+    def get_agent_close_app_consecutive_distractions(self) -> int:
+        return int(self._get_config_value("agent_close_app_consecutive_distractions", 2))
+
+    def get_agent_close_app_window_sec(self) -> int:
+        return int(self._get_config_value("agent_close_app_window_sec", 60))
+
+    def get_agent_close_scope(self) -> str:
+        return str(self._get_config_value("agent_close_scope", "frontmost"))
+
+    def get_agent_close_blocklist(self) -> list:
+        val = self._get_config_value("agent_close_blocklist", [])
+        return list(val) if isinstance(val, (list, tuple)) else []
+
+    def get_agent_close_prompt_countdown_sec(self) -> int:
+        return int(self._get_config_value("agent_close_prompt_countdown_sec", 0))
+    
+    def set_agent_close_app_enabled(self, enabled: bool) -> None:
+        """Save agent close app enabled setting to user config.
+        
+        Args:
+            enabled: Whether to enable the agentic app-close feature
+        """
+        self._user_config["agent_close_app_enabled"] = enabled
+        
+        # Save to config file
+        user_config_path = self.data_dir / "config.encrypted.json"
+        try:
+            import json
+            with open(user_config_path, 'w') as f:
+                json.dump(self._user_config, f, indent=2)
+            logger.info(f"Agent close app enabled: {enabled}")
+        except Exception as e:
+            logger.error(f"Failed to save agent config: {e}")
+    
+    # --------------------------------------------------------------------
+    # Focus Duration Analyzer
+    # --------------------------------------------------------------------
+    def is_focus_analyzer_enabled(self) -> bool:
+        """Check if focus duration analyzer is enabled."""
+        value = self._get_config_value("focus_analyzer_enabled", True)
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes')
+        return bool(value)
+    
+    def get_focus_analyzer_min_sessions(self) -> int:
+        """Get minimum sessions needed for focus duration analysis."""
+        return int(self._get_config_value("focus_analyzer_min_sessions", 3))
+    
+    def get_focus_analyzer_lookback_days(self) -> int:
+        """Get lookback window in days for focus duration analysis."""
+        return int(self._get_config_value("focus_analyzer_lookback_days", 30))
+    
+    def get_focus_analyzer_recommendation_factor(self) -> float:
+        """Get recommendation factor (0.0-1.0) for focus duration suggestions."""
+        return float(self._get_config_value("focus_analyzer_recommendation_factor", 0.75))
     
     def get_video_bitrate_kbps_cam(self) -> int:
         """Get camera video bitrate in kbps."""
