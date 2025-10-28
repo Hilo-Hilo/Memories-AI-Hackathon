@@ -1,5 +1,7 @@
 # Focus Guardian - ADHD Distraction Analysis Desktop Application
 
+[![Watch Demo](https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=for-the-badge&logo=youtube)](https://youtu.be/hQMT0d7uPpw)
+
 ## Project Overview
 
 **Focus Guardian** is a desktop application designed to help individuals with ADHD monitor and reduce distraction episodes in real-time. Unlike traditional productivity tools that block websites or track time, Focus Guardian actively monitors your attention state through webcam and screen analysis, detecting when you lose focus and providing gentle interventions to refocus.
