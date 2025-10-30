@@ -33,13 +33,13 @@ For people with ADHD, external structure and feedback are crucial for maintainin
 - Contribution: Core development, video editing, Vibe coding
 - Background: University student passionate about building tools that make a difference
 
-**Hansen Wen** | *Berkeley, CA - UC Berkeley*
+**Hanson Wen** | *Berkeley, CA - UC Berkeley*
 - Contribution: Core development, video editing, Vibe coding  
 - Background: University student with expertise in AI/ML applications
 
 **Fun Facts:**
 - James is lactose intolerant but drinks a lot of milk anyway—his digestive system pays the price daily 😅
-- Hansen holds a Guinness World Record for flying around the world in the fastest time! 🌍✈️
+- Hanson holds a Guinness World Record for flying around the world in the fastest time! 🌍✈️
 
 *We've been high school friends for a long time, giving us great team chemistry and seamless collaboration.*
 
@@ -284,7 +284,7 @@ See `config/default_config.json` for customizable settings:
 ## Contact
 
 **James Gui** - Los Angeles, CA  
-**Hansen Wen** - Berkeley, CA
+**Hanson Wen** - Berkeley, CA
 
 ---
 
